@@ -52,6 +52,7 @@ class DiagnosticianType(object):
     RESOURCE_COLLECT_FAILURE = "resource_collection_failure"
     NODE_INCONSISTENCY = "node_inconsistency"
     TRAINING_HANG = "training_hang"
+    PERFORMANCE = "performance"
 
 
 class DiagnosisErrorConstant(object):
@@ -60,12 +61,14 @@ class DiagnosisErrorConstant(object):
     NODE_FAILED = "Node failed"
     REPEATED_NODE = "Repeated node"
     TRAINING_IS_HANG = "Training is hang"
+    TRAINING_SPEED_DEGRADATION = "training_speed_degradation"
 
 
 class DiagnosisDataType(object):
     GENERIC = "GENERIC"
     TRAINING_LOG = "TRAINING_LOG"
     XPU_TIMER_METRIC = "XPU_TIMER_METRIC"
+    PERFORMANCE_ISSUE = "PERFORMANCE_ISSUE"
 
 
 class DiagnosisActionType(object):
@@ -79,6 +82,7 @@ class DiagnosisActionType(object):
     JOB_RESTART = "job_restart"
     MASTER_RELAUNCH_WORKER = "master_relaunch_worker"
     EVENT = "event"
+    REPORT_DIAGNOSIS_DATA = "report_diagnosis_data"
 
     # node operation
     RESTART_WORKER = "restart_worker"

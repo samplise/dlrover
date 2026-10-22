@@ -249,6 +249,61 @@ class NodeAction(DiagnosisAction):
         )
 
 
+class ReportDiagnosisDataAction(DiagnosisAction):
+    """Report serialized diagnosis data from a worker to the master."""
+
+    def __init__(
+        self,
+        data_cls: str = "",
+        data_content: str = "",
+        node_rank: int = -1,
+        reason: str = "",
+        instance=DiagnosisConstant.LOCAL_INSTANCE,
+        timestamp=0,
+        expired_time_period=0,
+        executable_time_period=0,
+        **kwargs,
+    ):
+        super().__init__(
+            action_type=DiagnosisActionType.REPORT_DIAGNOSIS_DATA,
+            instance=instance,
+            timestamp=timestamp,
+            expired_time_period=expired_time_period,
+            executable_time_period=executable_time_period,
+        )
+        self._data_cls = data_cls
+        self._data_content = data_content
+        self._node_rank = node_rank
+        self._reason = reason
+
+    @property
+    def data_cls(self):
+        return self._data_cls
+
+    @property
+    def data_content(self):
+        return self._data_content
+
+    @property
+    def node_rank(self):
+        return self._node_rank
+
+    @property
+    def reason(self):
+        return self._reason
+
+    def __repr__(self):
+        return (
+            f"action_type:{self._action_type};"
+            f"instance:{self._instance};"
+            f"timestamp:{self._timestamp};"
+            f"expired_time_period:{self._expired_time_period};"
+            f"data_cls:{self._data_cls};"
+            f"node_rank:{self._node_rank};"
+            f"reason:{self._reason}"
+        )
+
+
 class JobAction(DiagnosisAction):
     def __init__(
         self,

@@ -55,6 +55,9 @@ from dlrover.python.diagnosis.diagnostician.node_failure import (
 from dlrover.python.diagnosis.diagnostician.resource_collect_failure import (
     ResourceCollectionFailureDiagnostician,
 )
+from dlrover.python.diagnosis.diagnostician.performance import (
+    PerformanceDiagnostician,
+)
 from dlrover.python.elastic_agent.context import get_agent_context
 from dlrover.python.elastic_agent.master_client import MasterClient
 from dlrover.python.elastic_agent.torch.dynamic_failover import (
@@ -94,6 +97,11 @@ class DiagnosisAgent(Singleton, DiagnosisManager):
             ResourceCollectionFailureDiagnostician(),
             30,
         )
+        self.register_diagnostician(
+            DiagnosticianType.PERFORMANCE,
+            PerformanceDiagnostician(),
+            10,
+        )
 
         # register periodical data collector
         self.register_periodical_data_collector(XpuTimerMetricsCollector(), 60)
@@ -129,6 +137,12 @@ class DiagnosisAgent(Singleton, DiagnosisManager):
         if rank >= 0:
             self._node_rank = rank
             logger.info(f"Update rank: {rank}")
+
+    def get_diagnosis_inputs(self):
+        return {
+            "log_file": self._training_log_file,
+            "node_rank": self._node_rank,
+        }
 
     def start(self):
         self.start_diagnosis()

@@ -98,6 +98,7 @@ from dlrover.python.diagnosis.common.diagnosis_action import (
     NoAction,
     NodeAction,
     JobAction,
+    ReportDiagnosisDataAction,
 )
 from dlrover.python.elastic_agent.config.paral_config_tuner import (
     ParalConfigTuner,
@@ -1550,6 +1551,17 @@ class ElasticTrainingAgent(LocalElasticAgent):
                 self._worker_group.state = WorkerState.FAILED
             elif action_type == DiagnosisActionType.COLLECT_METRIC:
                 self._collect_metric()
+        elif isinstance(action, ReportDiagnosisDataAction):
+            logger.info(
+                "Report diagnosis data to master: %s (%s)",
+                action.data_cls,
+                action.reason,
+            )
+            self._client.report_diagnosis_data(
+                action.data_cls,
+                action.data_content,
+                action.node_rank,
+            )
         elif isinstance(action, EventAction):
             action.__class__ = EventAction
             labels = action.event_labels

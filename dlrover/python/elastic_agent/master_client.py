@@ -466,12 +466,20 @@ class MasterClient(Singleton, ABC):
         self._report(config)
 
     def report_diagnosis_agent_metrics(self, data: DiagnosisData):
-        message = comm.DiagnosisReportData(
-            data.__class__.__name__,
-            data.to_json(),
-            data.node_rank,
+        return self.report_diagnosis_data(
+            data.__class__.__name__, data.to_json(), data.node_rank
         )
-        self._report(message)
+
+    def report_diagnosis_data(
+        self, data_cls: str, data_content: str, node_rank: int = -1
+    ):
+        """Report serialized diagnosis data using the common RPC envelope."""
+        message = comm.DiagnosisReportData(
+            data_cls,
+            data_content,
+            node_rank,
+        )
+        return self._report(message)
 
     def get_paral_config(self) -> comm.ParallelConfig:
         request = comm.ParallelConfigRequest()

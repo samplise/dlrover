@@ -14,7 +14,7 @@
 import json
 from abc import ABCMeta
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from dlrover.python.common import env_utils
 from dlrover.python.diagnosis.common.constants import DiagnosisDataType
@@ -176,3 +176,160 @@ class TrainingLog(DiagnosisData):
         if not self.data_content:
             return []
         return [line for line in self.data_content.splitlines()]
+
+
+class PerformanceDiagnosisData(DiagnosisData):
+    """A worker report describing a sustained performance issue.
+
+    The report deliberately keeps the diagnosis fields as simple JSON values.
+    This makes it safe to pass through ``DiagnosisReportData`` and leaves the
+    master-side diagnostician free to decide how the evidence should be
+    aggregated.  ``data_content`` contains the same issue payload in JSON for
+    consumers that only understand the base :class:`DiagnosisData` contract.
+    """
+
+    def __init__(
+        self,
+        timestamp: int = 0,
+        data_type: str = DiagnosisDataType.PERFORMANCE_ISSUE,
+        data_content: str = "",
+        node_id=env_utils.get_node_id(),
+        node_type=env_utils.get_node_type(),
+        node_rank=env_utils.get_node_rank(),
+        issue_type: str = "",
+        metric_name: str = "",
+        metric_value: Optional[float] = None,
+        baseline_value: Optional[float] = None,
+        threshold_value: Optional[float] = None,
+        degradation_ratio: Optional[float] = None,
+        sample_count: int = 0,
+        first_timestamp: int = 0,
+        last_timestamp: int = 0,
+        first_iteration: Optional[int] = None,
+        last_iteration: Optional[int] = None,
+        evidence: Optional[List[Dict[str, Any]]] = None,
+    ):
+        if data_content and not any(
+            [
+                issue_type,
+                metric_name,
+                metric_value is not None,
+                baseline_value is not None,
+                threshold_value is not None,
+                degradation_ratio is not None,
+                sample_count,
+                first_timestamp,
+                last_timestamp,
+                first_iteration is not None,
+                last_iteration is not None,
+                evidence,
+            ]
+        ):
+            try:
+                payload = json.loads(data_content)
+                issue_type = payload.get("issue_type", "")
+                metric_name = payload.get("metric_name", "")
+                metric_value = payload.get("metric_value")
+                baseline_value = payload.get("baseline_value")
+                threshold_value = payload.get("threshold_value")
+                degradation_ratio = payload.get("degradation_ratio")
+                sample_count = payload.get("sample_count", 0)
+                first_timestamp = payload.get("first_timestamp", 0)
+                last_timestamp = payload.get("last_timestamp", 0)
+                first_iteration = payload.get("first_iteration")
+                last_iteration = payload.get("last_iteration")
+                evidence = payload.get("evidence")
+            except (TypeError, ValueError):
+                # Preserve an opaque payload.  The master can still retain
+                # the report even when a future worker sends a new schema.
+                pass
+
+        self._issue_type = issue_type
+        self._metric_name = metric_name
+        self._metric_value = metric_value
+        self._baseline_value = baseline_value
+        self._threshold_value = threshold_value
+        self._degradation_ratio = degradation_ratio
+        self._sample_count = sample_count
+        self._first_timestamp = first_timestamp
+        self._last_timestamp = last_timestamp
+        self._first_iteration = first_iteration
+        self._last_iteration = last_iteration
+        self._evidence = evidence or []
+
+        if not data_content:
+            data_content = json.dumps(self.issue)
+
+        super().__init__(
+            timestamp,
+            data_type,
+            data_content,
+            node_id,
+            node_type,
+            node_rank,
+        )
+
+    @property
+    def issue_type(self):
+        return self._issue_type
+
+    @property
+    def metric_name(self):
+        return self._metric_name
+
+    @property
+    def metric_value(self):
+        return self._metric_value
+
+    @property
+    def baseline_value(self):
+        return self._baseline_value
+
+    @property
+    def threshold_value(self):
+        return self._threshold_value
+
+    @property
+    def degradation_ratio(self):
+        return self._degradation_ratio
+
+    @property
+    def sample_count(self):
+        return self._sample_count
+
+    @property
+    def first_timestamp(self):
+        return self._first_timestamp
+
+    @property
+    def last_timestamp(self):
+        return self._last_timestamp
+
+    @property
+    def first_iteration(self):
+        return self._first_iteration
+
+    @property
+    def last_iteration(self):
+        return self._last_iteration
+
+    @property
+    def evidence(self):
+        return self._evidence
+
+    @property
+    def issue(self) -> Dict[str, Any]:
+        return {
+            "issue_type": self._issue_type,
+            "metric_name": self._metric_name,
+            "metric_value": self._metric_value,
+            "baseline_value": self._baseline_value,
+            "threshold_value": self._threshold_value,
+            "degradation_ratio": self._degradation_ratio,
+            "sample_count": self._sample_count,
+            "first_timestamp": self._first_timestamp,
+            "last_timestamp": self._last_timestamp,
+            "first_iteration": self._first_iteration,
+            "last_iteration": self._last_iteration,
+            "evidence": self._evidence,
+        }
