@@ -240,22 +240,52 @@ class PerformanceDiagnosticianConfig:
     history_retention_seconds: int = 1800
     baseline_window_size: int = 20
     minimum_baseline_records: int = 5
+
+    # Normal degradation threshold. If set, this absolute threshold wins;
+    # otherwise healthy_baseline * degradation_ratio is used.
     throughput_threshold: Optional[float] = None
     degradation_ratio: float = 0.7
-    consecutive_degraded_records: int = 3
-    minimum_degradation_duration_seconds: int = 60
-    recovery_records: int = 3
+
+    # A sustained issue is raised when enough samples in the recent
+    # window are below the normal degradation threshold.
+    degradation_window_seconds: int = 60
+    degradation_fraction_threshold: float = 0.70
+    minimum_window_records: int = 10
+
+    # Second, independent rule for sparse but catastrophic slowdown.
+    # An explicit absolute severe threshold is optional; otherwise the severe
+    # threshold is healthy_baseline * severe_degradation_ratio.
+    severe_throughput_threshold: Optional[float] = None
+    severe_degradation_ratio: float = 0.20
+    severe_window_seconds: int = 10
+    severe_fraction_threshold: float = 0.10
+
+    # Require enough total samples to make the fraction meaningful,
+    # but allow one catastrophic sample to trigger once that context exists.
+    minimum_severe_window_records: int = 10
+    minimum_severe_records: int = 1
+
+    # Recovery is also window based to avoid clearing an issue after
+    # only a few lucky healthy samples.
+    recovery_window_seconds: int = 60
+    recovery_healthy_fraction: float = 0.90
+    minimum_recovery_records: int = 10
+
     maximum_evidence_records: int = 5
 
 
 class PerformanceDiagnostician(Diagnostician):
-    """Diagnose sustained training-speed degradation on one worker.
+    """Diagnose training-speed degradation on one worker.
 
-    The diagnostician reads the existing training-log collector, so it does
-    not create a second log-reading path.  It evaluates only newly observed
-    records and keeps a rolling set of healthy throughput values for the
-    baseline.  A report is emitted only after the configured consecutive
-    sample and duration conditions are satisfied.
+    Detection uses two independent rolling-window rules:
+
+    1. sustained degradation: a high fraction of samples in a longer window
+       are below the normal throughput threshold;
+    2. severe intermittent degradation: a smaller fraction of samples in a
+       shorter window are below a much more severe threshold.
+
+    The existing TrainingLogCollector, PerformanceHistory, report path, and
+    PerformanceIssue/PerformanceDiagnosisData structures are reused.
     """
 
     def __init__(self, config: Optional[PerformanceDiagnosticianConfig] = None):
@@ -268,10 +298,8 @@ class PerformanceDiagnostician(Diagnostician):
         self._healthy_records: Deque[PerformanceRecord] = deque(
             maxlen=max(1, self._config.baseline_window_size)
         )
-        self._degraded_records: List[PerformanceRecord] = []
-        self._first_degraded_timestamp: Optional[int] = None
+        
         self._issue_reported = False
-        self._recovery_count = 0
 
     @property
     def config(self) -> PerformanceDiagnosticianConfig:
@@ -356,6 +384,15 @@ class PerformanceDiagnostician(Diagnostician):
             return None
         return baseline * self._config.degradation_ratio
 
+    # A separate threshold models catastrophic slowdown instead of
+    # treating a 69%-of-baseline sample and a 5%-of-baseline sample equally.
+    def _severe_threshold(self, baseline: Optional[float]) -> Optional[float]:
+        if self._config.severe_throughput_threshold is not None:
+            return self._config.severe_throughput_threshold
+        if baseline is None:
+            return None
+        return baseline * self._config.severe_degradation_ratio
+
     def _add_healthy_record(self, record: PerformanceRecord):
         while self._healthy_records and (
             record.timestamp - self._healthy_records[0].timestamp
@@ -368,34 +405,144 @@ class PerformanceDiagnostician(Diagnostician):
         values = self.healthy_throughputs
         return median(values) if values else None
 
-    def _make_issue(self, record: PerformanceRecord) -> PerformanceIssue:
-        baseline = self._healthy_baseline()
+    # Obtain throughput samples from the existing PerformanceHistory
+    # instead of maintaining a separate consecutive-degradation list.
+    def _throughput_records_in_window(
+        self, now: int, window_seconds: int
+    ) -> List[PerformanceRecord]:
+        start = now - max(0, window_seconds)
+        return [
+            item
+            for item in self._history.records
+            if item.throughput is not None
+            and start <= item.timestamp <= now
+        ]
+
+    # Rule A -- frequent/moderate degradation.
+    def _detect_sustained_degradation(
+        self,
+        baseline: Optional[float],
+        now: int,
+    ) -> Tuple[bool, Optional[float], float, List[PerformanceRecord]]:
+        records = self._throughput_records_in_window(
+            now, self._config.degradation_window_seconds
+        )
+        if len(records) < max(1, self._config.minimum_window_records):
+            return False, None, 0.0, []
+
         threshold = self._threshold(baseline)
+        if threshold is None:
+            return False, None, 0.0, []
+
+        degraded = [
+            item
+            for item in records
+            if item.throughput is not None and item.throughput < threshold
+        ]
+        fraction = len(degraded) / len(records)
+        detected = fraction >= self._config.degradation_fraction_threshold
+        return detected, threshold, fraction, degraded
+
+    # Rule B -- sparse/extreme degradation.
+    def _detect_severe_degradation(
+        self,
+        baseline: Optional[float],
+        now: int,
+    ) -> Tuple[bool, Optional[float], float, List[PerformanceRecord]]:
+        records = self._throughput_records_in_window(
+            now, self._config.severe_window_seconds
+        )
+        if len(records) < max(
+            1, self._config.minimum_severe_window_records
+        ):
+            return False, None, 0.0, []
+
+        threshold = self._severe_threshold(baseline)
+        if threshold is None:
+            return False, None, 0.0, []
+
+        severe = [
+            item
+            for item in records
+            if item.throughput is not None and item.throughput < threshold
+        ]
+        fraction = len(severe) / len(records)
+        detected = (
+            len(severe) >= max(1, self._config.minimum_severe_records)
+            and fraction >= self._config.severe_fraction_threshold
+        )
+        return detected, threshold, fraction, severe
+
+    # Recovery uses a recent window instead of N consecutive samples.
+    def _is_recovered(
+        self,
+        baseline: Optional[float],
+        now: int,
+    ) -> bool:
+        records = self._throughput_records_in_window(
+            now, self._config.recovery_window_seconds
+        )
+        if len(records) < max(1, self._config.minimum_recovery_records):
+            return False
+
+        threshold = self._threshold(baseline)
+        if threshold is None:
+            return False
+
+        healthy_count = sum(
+            1
+            for item in records
+            if item.throughput is not None and item.throughput >= threshold
+        )
+        healthy_fraction = healthy_count / len(records)
+        return healthy_fraction >= self._config.recovery_healthy_fraction
+
+    # Build evidence from the records that actually triggered the
+    # selected rule. The metric value is the worst observed throughput rather
+    # than necessarily the most recent sample.
+    def _make_issue(
+        self,
+        record: PerformanceRecord,
+        baseline: Optional[float],
+        threshold: Optional[float],
+        abnormal_records: List[PerformanceRecord],
+    ) -> PerformanceIssue:
+        evidence_records = abnormal_records or [record]
+        evidence_records = sorted(
+            evidence_records, key=lambda item: item.timestamp
+        )
+
+        representative = min(
+            evidence_records,
+            key=lambda item: (
+                item.throughput
+                if item.throughput is not None
+                else float("inf")
+            ),
+        )
         ratio = (
-            record.throughput / baseline
-            if record.throughput is not None and baseline not in (None, 0)
+            representative.throughput / baseline
+            if representative.throughput is not None
+            and baseline not in (None, 0)
             else None
         )
         evidence = [
             item.to_dict()
-            for item in self._degraded_records[
+            for item in evidence_records[
                 -self._config.maximum_evidence_records :
             ]
         ]
+
         return PerformanceIssue(
-            metric_value=record.throughput,
+            metric_value=representative.throughput,
             baseline_value=baseline,
             threshold_value=threshold,
             degradation_ratio=ratio,
-            sample_count=len(self._degraded_records),
-            first_timestamp=self._first_degraded_timestamp or record.timestamp,
-            last_timestamp=record.timestamp,
-            first_iteration=(
-                self._degraded_records[0].iteration
-                if self._degraded_records
-                else record.iteration
-            ),
-            last_iteration=record.iteration,
+            sample_count=len(abnormal_records),
+            first_timestamp=evidence_records[0].timestamp,
+            last_timestamp=evidence_records[-1].timestamp,
+            first_iteration=evidence_records[0].iteration,
+            last_iteration=evidence_records[-1].iteration,
             evidence=evidence,
         )
 
@@ -412,41 +559,56 @@ class PerformanceDiagnostician(Diagnostician):
             >= max(1, self._config.minimum_baseline_records)
             else None
         )
-        threshold = self._threshold(baseline)
-        is_degraded = threshold is not None and throughput < threshold
+        normal_threshold = self._threshold(baseline)
 
-        if is_degraded:
-            self._recovery_count = 0
-            if self._first_degraded_timestamp is None:
-                self._first_degraded_timestamp = record.timestamp
-                self._degraded_records = []
-            self._degraded_records.append(record)
-
-            duration = max(
-                0, record.timestamp - self._first_degraded_timestamp
-            )
-            if (
-                not self._issue_reported
-                and len(self._degraded_records)
-                >= max(1, self._config.consecutive_degraded_records)
-                and duration
-                >= self._config.minimum_degradation_duration_seconds
-            ):
-                self._issue_reported = True
-                return self._make_issue(record)
+        # Once an issue has been reported, do not generate another
+        # issue until a window-based recovery condition is satisfied.
+        if self._issue_reported:
+            if self._is_recovered(baseline, record.timestamp):
+                self._issue_reported = False
+                # Only feed a recovered/healthy value back into the healthy
+                # baseline. This prevents an active incident from pulling the
+                # baseline downward.
+                if (
+                    normal_threshold is None
+                    or throughput >= normal_threshold
+                ):
+                    self._add_healthy_record(record)
             return None
 
-        self._add_healthy_record(record)
-        if self._issue_reported:
-            self._recovery_count += 1
-            if self._recovery_count >= max(1, self._config.recovery_records):
-                self._issue_reported = False
-                self._recovery_count = 0
-                self._degraded_records = []
-                self._first_degraded_timestamp = None
-        elif self._degraded_records:
-            self._degraded_records = []
-            self._first_degraded_timestamp = None
+        # Evaluate both independent detectors. Severe degradation is
+        # checked first so evidence/threshold reflect the stronger condition
+        # when both rules are true at the same time.
+        severe_detected, severe_threshold, _, severe_records = (
+            self._detect_severe_degradation(baseline, record.timestamp)
+        )
+        sustained_detected, sustained_threshold, _, degraded_records = (
+            self._detect_sustained_degradation(baseline, record.timestamp)
+        )
+
+        if severe_detected:
+            self._issue_reported = True
+            return self._make_issue(
+                record,
+                baseline,
+                severe_threshold,
+                severe_records,
+            )
+
+        if sustained_detected:
+            self._issue_reported = True
+            return self._make_issue(
+                record,
+                baseline,
+                sustained_threshold,
+                degraded_records,
+            )
+
+        # Evaluate the normal threshold and add the record to the healthy baseline
+        # if it meets the criteria.
+        if normal_threshold is None or throughput >= normal_threshold:
+            self._add_healthy_record(record)
+
         return None
 
     def observe(self, **kwargs) -> Optional[DiagnosisObservation]:
