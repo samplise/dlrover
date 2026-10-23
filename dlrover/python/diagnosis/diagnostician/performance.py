@@ -14,6 +14,7 @@
 import json
 import re
 import time
+import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -650,7 +651,43 @@ class PerformanceDiagnostician(Diagnostician):
         except (TypeError, ValueError, json.JSONDecodeError):
             return [NoAction()]
 
+        job_uid = str(
+            kwargs.get("job_uid", env_utils.get_job_uid()) or ""
+        )
+        run_id = str(
+            kwargs.get("run_id")
+            or env_utils.get_env("TORCHELASTIC_RUN_ID")
+            or ""
+        )
+        rdzv_epoch = int(kwargs.get("rdzv_epoch", 0) or 0)
+        config_fingerprint = str(
+            kwargs.get("config_fingerprint", "") or ""
+        )
+        node_id = int(
+            kwargs.get("node_id", env_utils.get_node_id())
+        )
+        node_rank = int(
+            kwargs.get("node_rank", env_utils.get_node_rank())
+        )
+        report_key = ":".join(
+            [
+                job_uid,
+                run_id,
+                str(rdzv_epoch),
+                config_fingerprint,
+                str(node_id),
+                str(node_rank),
+                issue.issue_type,
+                str(issue.first_timestamp),
+                str(issue.last_iteration),
+            ]
+        )
+        report_id = str(
+            uuid.uuid5(uuid.NAMESPACE_URL, f"dlrover-performance:{report_key}")
+        )
+
         data = PerformanceDiagnosisData(
+            timestamp=issue.last_timestamp or int(time.time()),
             issue_type=issue.issue_type,
             metric_name=issue.metric_name,
             metric_value=issue.metric_value,
@@ -663,7 +700,13 @@ class PerformanceDiagnostician(Diagnostician):
             first_iteration=issue.first_iteration,
             last_iteration=issue.last_iteration,
             evidence=issue.evidence,
-            node_rank=kwargs.get("node_rank", env_utils.get_node_rank()),
+            node_id=node_id,
+            node_rank=node_rank,
+            report_id=report_id,
+            job_uid=job_uid,
+            run_id=run_id,
+            rdzv_epoch=rdzv_epoch,
+            config_fingerprint=config_fingerprint,
         )
         return [
             ReportDiagnosisDataAction(
@@ -671,6 +714,9 @@ class PerformanceDiagnostician(Diagnostician):
                 data_content=data.to_json(),
                 node_rank=data.node_rank,
                 reason=issue.issue_type,
+                report_id=data.report_id,
+                data_type=data.data_type,
+                schema_version=data.schema_version,
             )
         ]
 

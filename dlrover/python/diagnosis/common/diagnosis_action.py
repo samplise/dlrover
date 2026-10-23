@@ -262,6 +262,9 @@ class ReportDiagnosisDataAction(DiagnosisAction):
         timestamp=0,
         expired_time_period=0,
         executable_time_period=0,
+        report_id: str = "",
+        data_type: str = "",
+        schema_version: int = 1,
         **kwargs,
     ):
         super().__init__(
@@ -275,6 +278,9 @@ class ReportDiagnosisDataAction(DiagnosisAction):
         self._data_content = data_content
         self._node_rank = node_rank
         self._reason = reason
+        self._report_id = report_id
+        self._data_type = data_type
+        self._schema_version = schema_version
 
     @property
     def data_cls(self):
@@ -292,6 +298,18 @@ class ReportDiagnosisDataAction(DiagnosisAction):
     def reason(self):
         return self._reason
 
+    @property
+    def report_id(self):
+        return self._report_id
+
+    @property
+    def data_type(self):
+        return self._data_type
+
+    @property
+    def schema_version(self):
+        return self._schema_version
+
     def __repr__(self):
         return (
             f"action_type:{self._action_type};"
@@ -300,6 +318,9 @@ class ReportDiagnosisDataAction(DiagnosisAction):
             f"expired_time_period:{self._expired_time_period};"
             f"data_cls:{self._data_cls};"
             f"node_rank:{self._node_rank};"
+            f"report_id:{self._report_id};"
+            f"data_type:{self._data_type};"
+            f"schema_version:{self._schema_version};"
             f"reason:{self._reason}"
         )
 

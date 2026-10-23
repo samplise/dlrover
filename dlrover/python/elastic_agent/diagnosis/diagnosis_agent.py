@@ -142,6 +142,9 @@ class DiagnosisAgent(Singleton, DiagnosisManager):
         return {
             "log_file": self._training_log_file,
             "node_rank": self._node_rank,
+            "node_id": env_utils.get_node_id(),
+            "job_uid": env_utils.get_job_uid(),
+            "run_id": env_utils.get_env("TORCHELASTIC_RUN_ID") or "",
         }
 
     def start(self):

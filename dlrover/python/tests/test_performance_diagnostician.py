@@ -16,6 +16,9 @@ import unittest
 from dlrover.python.diagnosis.common.diagnosis_action import (
     ReportDiagnosisDataAction,
 )
+from dlrover.python.diagnosis.common.diagnosis_data import (
+    PerformanceDiagnosisData,
+)
 from dlrover.python.diagnosis.diagnostician.performance import (
     PerformanceDiagnostician,
     PerformanceDiagnosticianConfig,
@@ -41,9 +44,15 @@ class TestPerformanceDiagnostician(unittest.TestCase):
         return PerformanceDiagnostician(
             PerformanceDiagnosticianConfig(
                 minimum_baseline_records=3,
-                consecutive_degraded_records=2,
-                minimum_degradation_duration_seconds=0,
-                recovery_records=2,
+                degradation_window_seconds=60,
+                degradation_fraction_threshold=0.3,
+                minimum_window_records=4,
+                severe_window_seconds=10,
+                severe_fraction_threshold=1.0,
+                minimum_severe_window_records=2,
+                recovery_window_seconds=60,
+                recovery_healthy_fraction=0.5,
+                minimum_recovery_records=2,
             )
         )
 
@@ -66,9 +75,53 @@ class TestPerformanceDiagnostician(unittest.TestCase):
         self.assertIsNotNone(observation)
         self.assertEqual(observation.observation, "training_speed_degradation")
 
-        actions = diagnostician.resolve(observation, node_rank=7)
+        actions = diagnostician.resolve(
+            observation,
+            node_id=3,
+            node_rank=7,
+            job_uid="job-1",
+            run_id="run-1",
+            rdzv_epoch=2,
+            config_fingerprint="config-1",
+        )
         self.assertIsInstance(actions[0], ReportDiagnosisDataAction)
         self.assertEqual(actions[0].node_rank, 7)
+        self.assertEqual(actions[0].data_type, "PERFORMANCE_ISSUE")
+        self.assertEqual(actions[0].schema_version, 1)
+        self.assertTrue(actions[0].report_id)
+
+        data = PerformanceDiagnosisData.from_json(actions[0].data_content)
+        self.assertEqual(data.report_id, actions[0].report_id)
+        self.assertEqual(data.job_uid, "job-1")
+        self.assertEqual(data.run_id, "run-1")
+        self.assertEqual(data.rdzv_epoch, 2)
+        self.assertEqual(data.node_id, 3)
+
+        serialized_action = ReportDiagnosisDataAction.from_json(
+            actions[0].to_json()
+        )
+        self.assertEqual(
+            serialized_action.report_id, actions[0].report_id
+        )
+        self.assertEqual(
+            serialized_action.data_type, actions[0].data_type
+        )
+
+        repeated_actions = diagnostician.resolve(
+            observation,
+            node_id=3,
+            node_rank=7,
+            job_uid="job-1",
+            run_id="run-1",
+            rdzv_epoch=2,
+            config_fingerprint="config-1",
+        )
+        self.assertEqual(
+            repeated_actions[0].report_id, actions[0].report_id
+        )
+        self.assertEqual(
+            repeated_actions[0].data_content, actions[0].data_content
+        )
         self.assertIsNone(diagnostician.observe(logs=healthy + degraded))
 
     def test_recovery_allows_a_new_issue(self):

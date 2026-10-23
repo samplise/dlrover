@@ -20,6 +20,9 @@ from dlrover.python.common import env_utils
 from dlrover.python.diagnosis.common.constants import DiagnosisDataType
 
 
+DIAGNOSIS_DATA_SCHEMA_VERSION = 1
+
+
 class DiagnosisData(metaclass=ABCMeta):
     """
     Basic definition of diagnosis data.
@@ -31,6 +34,10 @@ class DiagnosisData(metaclass=ABCMeta):
         node_id (int): Node ID. Defaults to -1.
         node_type (str): Node type. Defaults to "".
         node_rank (int): Node rank. Defaults to -1.
+        report_id (str): Unique data report ID. Defaults to "".
+        schema_version (int): Serialized report schema version. Defaults to 1.
+        received_at (int): Master receive timestamp. Defaults to 0.
+        sequence_id (int): Master storage sequence. Defaults to 0.
     """
 
     def __init__(
@@ -41,6 +48,10 @@ class DiagnosisData(metaclass=ABCMeta):
         node_id: int = -1,
         node_type: str = "",
         node_rank: int = -1,
+        report_id: str = "",
+        schema_version: int = DIAGNOSIS_DATA_SCHEMA_VERSION,
+        received_at: int = 0,
+        sequence_id: int = 0,
     ):
         if timestamp == 0:
             self._timestamp = int(round(datetime.now().timestamp()))
@@ -51,6 +62,10 @@ class DiagnosisData(metaclass=ABCMeta):
         self._node_id = node_id
         self._node_type = node_type
         self._node_rank = node_rank
+        self._report_id = report_id
+        self._schema_version = schema_version
+        self._received_at = received_at
+        self._sequence_id = sequence_id
 
     @property
     def data_type(self) -> str:
@@ -76,9 +91,43 @@ class DiagnosisData(metaclass=ABCMeta):
     def node_rank(self):
         return self._node_rank
 
+    @property
+    def report_id(self) -> str:
+        return self._report_id
+
+    @property
+    def schema_version(self) -> int:
+        return self._schema_version
+
+    @property
+    def received_at(self) -> int:
+        return self._received_at
+
+    @property
+    def sequence_id(self) -> int:
+        return self._sequence_id
+
+    def bind_source(self, node_id: int, node_type: str, node_rank: int):
+        """Bind the master-authoritative source of this report."""
+        self._node_id = node_id
+        self._node_type = node_type
+        self._node_rank = node_rank
+
+    def set_report_identity(self, report_id: str, schema_version: int):
+        """Bind report identity received in the common RPC envelope."""
+        self._report_id = report_id
+        self._schema_version = schema_version
+
+    def set_storage_metadata(self, received_at: int, sequence_id: int):
+        """Set metadata assigned by the master after accepting a report."""
+        self._received_at = received_at
+        self._sequence_id = sequence_id
+
+    def to_dict(self):
+        return {k.lstrip("_"): v for k, v in self.__dict__.items()}
+
     def to_json(self):
-        data = {k.lstrip("_"): v for k, v in self.__dict__.items()}
-        return json.dumps(data)
+        return json.dumps(self.to_dict())
 
     @classmethod
     def from_json(cls, json_data):
@@ -115,9 +164,22 @@ class WorkerTrainingMetric(DiagnosisData):
         node_rank=env_utils.get_node_rank(),
         is_final_result=False,
         need_report=False,
+        report_id: str = "",
+        schema_version: int = DIAGNOSIS_DATA_SCHEMA_VERSION,
+        received_at: int = 0,
+        sequence_id: int = 0,
     ):
         super(WorkerTrainingMetric, self).__init__(
-            timestamp, data_type, data_content, node_id, node_type, node_rank
+            timestamp,
+            data_type,
+            data_content,
+            node_id,
+            node_type,
+            node_rank,
+            report_id,
+            schema_version,
+            received_at,
+            sequence_id,
         )
         self._is_final_result = is_final_result
         self._need_report = need_report
@@ -156,6 +218,10 @@ class TrainingLog(DiagnosisData):
         node_id=env_utils.get_node_id(),
         node_type=env_utils.get_node_type(),
         node_rank=env_utils.get_node_rank(),
+        report_id: str = "",
+        schema_version: int = DIAGNOSIS_DATA_SCHEMA_VERSION,
+        received_at: int = 0,
+        sequence_id: int = 0,
     ):
         if logs is None:
             data_content = ""
@@ -169,6 +235,10 @@ class TrainingLog(DiagnosisData):
             node_id,
             node_type,
             node_rank,
+            report_id,
+            schema_version,
+            received_at,
+            sequence_id,
         )
 
     @property
@@ -208,6 +278,14 @@ class PerformanceDiagnosisData(DiagnosisData):
         first_iteration: Optional[int] = None,
         last_iteration: Optional[int] = None,
         evidence: Optional[List[Dict[str, Any]]] = None,
+        report_id: str = "",
+        schema_version: int = DIAGNOSIS_DATA_SCHEMA_VERSION,
+        received_at: int = 0,
+        sequence_id: int = 0,
+        job_uid: str = "",
+        run_id: str = "",
+        rdzv_epoch: int = 0,
+        config_fingerprint: str = "",
     ):
         if data_content and not any(
             [
@@ -256,6 +334,10 @@ class PerformanceDiagnosisData(DiagnosisData):
         self._first_iteration = first_iteration
         self._last_iteration = last_iteration
         self._evidence = evidence or []
+        self._job_uid = job_uid
+        self._run_id = run_id
+        self._rdzv_epoch = rdzv_epoch
+        self._config_fingerprint = config_fingerprint
 
         if not data_content:
             data_content = json.dumps(self.issue)
@@ -267,6 +349,10 @@ class PerformanceDiagnosisData(DiagnosisData):
             node_id,
             node_type,
             node_rank,
+            report_id,
+            schema_version,
+            received_at,
+            sequence_id,
         )
 
     @property
@@ -316,6 +402,22 @@ class PerformanceDiagnosisData(DiagnosisData):
     @property
     def evidence(self):
         return self._evidence
+
+    @property
+    def job_uid(self):
+        return self._job_uid
+
+    @property
+    def run_id(self):
+        return self._run_id
+
+    @property
+    def rdzv_epoch(self):
+        return self._rdzv_epoch
+
+    @property
+    def config_fingerprint(self):
+        return self._config_fingerprint
 
     @property
     def issue(self) -> Dict[str, Any]:

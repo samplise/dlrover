@@ -40,7 +40,11 @@ from dlrover.python.common.constants import (
     CommunicationReqMeta,
 )
 from dlrover.python.common.global_context import Context
-from dlrover.python.diagnosis.common.diagnosis_data import WorkerTrainingMetric
+from dlrover.python.diagnosis.common.constants import DiagnosisDataType
+from dlrover.python.diagnosis.common.diagnosis_data import (
+    PerformanceDiagnosisData,
+    WorkerTrainingMetric,
+)
 from dlrover.python.master.diagnosis.diagnosis_master import DiagnosisMaster
 from dlrover.python.master.elastic_training.elastic_ps import ElasticPsService
 from dlrover.python.master.elastic_training.rdzv_manager import (
@@ -655,6 +659,50 @@ class MasterServicerFunctionalTest(unittest.TestCase):
             test.node_rank,
         )
         self.assertTrue(self.servicer._report_node_diagnosis_data(request))
+
+    def test_report_performance_diagnosis_data(self):
+        data = PerformanceDiagnosisData(
+            timestamp=123,
+            issue_type="training_speed_degradation",
+            metric_name="throughput_per_gpu_tflops",
+            metric_value=0.5,
+            baseline_value=1.0,
+            threshold_value=0.7,
+            sample_count=2,
+            first_timestamp=100,
+            last_timestamp=101,
+            first_iteration=10,
+            last_iteration=11,
+            report_id="performance-report-1",
+            job_uid="job-1",
+            run_id="run-1",
+            rdzv_epoch=1,
+        )
+        request = comm.DiagnosisReportData(
+            data_cls=data.__class__.__name__,
+            data_content=data.to_json(),
+            node_rank=0,
+            report_id=data.report_id,
+            data_type=data.data_type,
+            schema_version=data.schema_version,
+        )
+
+        self.assertTrue(
+            self.servicer._report_node_diagnosis_data(
+                request, NodeType.WORKER, 0
+            )
+        )
+        self.assertTrue(
+            self.servicer._report_node_diagnosis_data(
+                request, NodeType.WORKER, 0
+            )
+        )
+        reports = self.servicer._diagnosis_manager.data_manager.get_data(
+            DiagnosisDataType.PERFORMANCE_ISSUE
+        )
+        self.assertEqual(len(reports), 1)
+        self.assertEqual(reports[0].report_id, data.report_id)
+        self.assertEqual(reports[0].node_id, 0)
 
     def test_deal_with_reported_node_event(self):
         request = comm.NodeEvent(node=comm.NodeMeta())

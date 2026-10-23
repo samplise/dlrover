@@ -62,7 +62,11 @@ class DiagnosisMaster(DiagnosisManager):
     def __init__(self, job_args: Optional[JobArgs] = None):
         self._is_observing_started = False
         self._is_observing_paused = False
-        self._data_manager: DiagnosisDataManager = DiagnosisDataManager(600)
+        self._data_manager: DiagnosisDataManager = DiagnosisDataManager(
+            expire_time_period=1800,
+            max_records_per_type=4096,
+            max_total_bytes=16 * 1024 * 1024,
+        )
         self._diagnostician: Diagnostician = Diagnostician(self._data_manager)
         self._job_context = get_job_context()
         self._job_args = job_args
@@ -72,8 +76,27 @@ class DiagnosisMaster(DiagnosisManager):
 
         super().__init__(self._job_context)
 
-    def collect_diagnosis_data(self, data: DiagnosisData):
-        self._data_manager.store_data(data)
+    @property
+    def data_manager(self):
+        return self._data_manager
+
+    @property
+    def job_args(self):
+        return self._job_args
+
+    def collect_diagnosis_data(
+        self,
+        data: DiagnosisData,
+        node_id=None,
+        node_type=None,
+        node_rank=None,
+    ):
+        return self._data_manager.store_data(
+            data,
+            node_id=node_id,
+            node_type=node_type,
+            node_rank=node_rank,
+        )
 
     def _report_event(self, event_type, instance, action, msg="", labels=None):
         if labels is None:

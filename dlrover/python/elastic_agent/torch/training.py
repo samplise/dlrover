@@ -1557,11 +1557,34 @@ class ElasticTrainingAgent(LocalElasticAgent):
                 action.data_cls,
                 action.reason,
             )
-            self._client.report_diagnosis_data(
-                action.data_cls,
-                action.data_content,
-                action.node_rank,
-            )
+            try:
+                response = self._client.report_diagnosis_data(
+                    action.data_cls,
+                    action.data_content,
+                    action.node_rank,
+                    report_id=action.report_id,
+                    data_type=action.data_type,
+                    schema_version=action.schema_version,
+                )
+            except Exception as error:
+                logger.warning(
+                    f"Failed to report diagnosis data: {error}"
+                )
+                if not action.is_expired():
+                    self._agent_context.enqueue_diagnosis_action(action)
+                return
+
+            if response is None:
+                logger.warning(
+                    "Master did not acknowledge diagnosis data report."
+                )
+                if not action.is_expired():
+                    self._agent_context.enqueue_diagnosis_action(action)
+            elif not response.success:
+                logger.warning(
+                    f"Master rejected diagnosis data report "
+                    f"{action.report_id or action.data_cls}."
+                )
         elif isinstance(action, EventAction):
             action.__class__ = EventAction
             labels = action.event_labels

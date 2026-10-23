@@ -467,17 +467,31 @@ class MasterClient(Singleton, ABC):
 
     def report_diagnosis_agent_metrics(self, data: DiagnosisData):
         return self.report_diagnosis_data(
-            data.__class__.__name__, data.to_json(), data.node_rank
+            data.__class__.__name__,
+            data.to_json(),
+            data.node_rank,
+            report_id=data.report_id,
+            data_type=data.data_type,
+            schema_version=data.schema_version,
         )
 
     def report_diagnosis_data(
-        self, data_cls: str, data_content: str, node_rank: int = -1
+        self,
+        data_cls: str,
+        data_content: str,
+        node_rank: int = -1,
+        report_id: str = "",
+        data_type: str = "",
+        schema_version: int = 1,
     ):
         """Report serialized diagnosis data using the common RPC envelope."""
         message = comm.DiagnosisReportData(
-            data_cls,
-            data_content,
-            node_rank,
+            data_cls=data_cls,
+            data_content=data_content,
+            node_rank=node_rank,
+            report_id=report_id,
+            data_type=data_type,
+            schema_version=schema_version,
         )
         return self._report(message)
 
