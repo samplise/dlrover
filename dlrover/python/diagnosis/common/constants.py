@@ -88,6 +88,7 @@ class DiagnosisActionType(object):
     RESTART_WORKER = "restart_worker"
     RELAUNCH_WORKER = "relaunch_worker"
     COLLECT_METRIC = "collect_metric"
+    ENABLE_PROFILING = "enable_profiling"
 
     # job operation
     RESTART_JOB = "restart_job"
@@ -113,6 +114,14 @@ class DiagnosisResult(object):
     DIAG_FAILURE = "failure"
     # diag finished, job has failure which cause abortion
     DIAG_ABORT = "abort"
+
+
+class DiagnosisState(object):
+    OPEN = "open"
+    ISSUE = "issue"
+    NO_ISSUE = "no_issue"
+    ACTION = "action"
+    CLOSED = "closed"
 
 
 class JobHangPolicy(object):

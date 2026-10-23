@@ -451,6 +451,7 @@ class MasterRendezvousHandler(RendezvousHandler):
         self.pend_timeout = float(rdzv_params.get("pend_timeout", "inf"))
         self._client = MasterClient.singleton_instance()
         self._store = MasterKVStore(self._name, timedelta(seconds=300))
+        self._last_rdzv_round = 0
         lastcall_timeout = int(rdzv_params.get("lastcall_timeout", 60))
         node_unit = int(rdzv_params.get("node_unit", "1"))
         self._client.report_rdzv_params(
@@ -469,6 +470,10 @@ class MasterRendezvousHandler(RendezvousHandler):
 
     def get_backend(self) -> str:
         return "dlrover-master"
+
+    @property
+    def rdzv_round(self) -> int:
+        return self._last_rdzv_round
 
     def is_closed(self) -> bool:
         return False
@@ -576,6 +581,7 @@ class MasterRendezvousHandler(RendezvousHandler):
             time.sleep(JobConstant.RENDEZVOUS_DEFAULT_INTERVAL)
         rank = list(world.keys()).index(self._node_rank)
         world_size = len(world)
+        self._last_rdzv_round = round
         logger.info(
             f"The node {node_name} has joined round {round} of "
             f"the {self._name} rendezvous as rank {rank} in a world of size "
@@ -854,6 +860,19 @@ class ElasticTrainingAgent(LocalElasticAgent):
 
         spec = worker_group.spec
         store, world = spec.rdzv_handler.next_rendezvous()
+        if self._diagnose_agent is not None:
+            rdzv_epoch = getattr(spec.rdzv_handler, "rdzv_round", 0)
+            get_run_id = getattr(spec.rdzv_handler, "get_run_id", None)
+            run_id = get_run_id() if callable(get_run_id) else ""
+            if not isinstance(run_id, str):
+                run_id = ""
+            self._diagnose_agent.update_config(
+                rank=self._node_rank,
+                run_id=run_id,
+                rdzv_epoch=rdzv_epoch
+                if isinstance(rdzv_epoch, int)
+                else 0,
+            )
         self._store = store
         group_world_size = len(world)
         group_rank = list(world.keys()).index(self._node_rank)

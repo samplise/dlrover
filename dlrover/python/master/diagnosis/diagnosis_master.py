@@ -18,6 +18,7 @@ from typing import Optional, Dict, Any
 from dlrover.python.common.constants import (
     EventReportConstants,
     PreCheckStatus,
+    RendezvousName,
 )
 from dlrover.python.common.event.context import JobEventContext
 from dlrover.python.common.event.reporter import get_event_reporter
@@ -39,6 +40,9 @@ from dlrover.python.master.diagnosis.diagnosis import Diagnostician
 from dlrover.python.master.diagnosis.diagnosis_data_manager import (
     DiagnosisDataManager,
 )
+from dlrover.python.master.diagnosis.diagnostician.performance import (
+    JobPerformanceDiagnostician,
+)
 from dlrover.python.master.node.job_context import get_job_context
 from dlrover.python.scheduler.job import JobArgs
 from dlrover.python.util.function_util import TimeoutException, timeout
@@ -59,7 +63,11 @@ class DiagnosisMaster(DiagnosisManager):
     DiagnosisMaster is used to manage all diagnosis issues in a training job.
     """
 
-    def __init__(self, job_args: Optional[JobArgs] = None):
+    def __init__(
+        self,
+        job_args: Optional[JobArgs] = None,
+        rdzv_managers=None,
+    ):
         self._is_observing_started = False
         self._is_observing_paused = False
         self._data_manager: DiagnosisDataManager = DiagnosisDataManager(
@@ -70,6 +78,7 @@ class DiagnosisMaster(DiagnosisManager):
         self._diagnostician: Diagnostician = Diagnostician(self._data_manager)
         self._job_context = get_job_context()
         self._job_args = job_args
+        self._rdzv_managers = rdzv_managers or {}
         self._reporter = get_event_reporter()
         self._metric_monitor = None
         self._lock = threading.Lock()
@@ -83,6 +92,10 @@ class DiagnosisMaster(DiagnosisManager):
     @property
     def job_args(self):
         return self._job_args
+
+    @property
+    def rdzv_managers(self):
+        return self._rdzv_managers
 
     def collect_diagnosis_data(
         self,
@@ -316,7 +329,23 @@ class DiagnosisMaster(DiagnosisManager):
             self._is_observing_paused = False
 
     def get_diagnosis_inputs(self) -> Dict[str, Any]:
-        return {"job_nodes": self._job_context.job_nodes()}
+        rdzv_epoch = None
+        rdzv_node_ids = None
+        rdzv_manager = self._rdzv_managers.get(
+            RendezvousName.TRAINING
+        )
+        if rdzv_manager is not None:
+            rdzv_epoch, rdzv_nodes = rdzv_manager.get_rdzv_snapshot()
+            rdzv_node_ids = [node_id for node_id, _ in rdzv_nodes]
+        return {
+            "job_nodes": self._job_context.dup_job_nodes(),
+            "job_uid": (
+                self._job_args.job_uuid if self._job_args else ""
+            ),
+            "rdzv_epoch": rdzv_epoch,
+            "rdzv_node_ids": rdzv_node_ids,
+            "observing_paused": self._is_observing_paused,
+        }
 
     def _register_diagnosticians(self):
         self.register_diagnostician(
@@ -329,6 +358,14 @@ class DiagnosisMaster(DiagnosisManager):
             DiagnosticianType.TRAINING_HANG,
             TrainingHangDiagnostician(self._job_args, self._data_manager),
             60 * 1,
+        )
+
+        self.register_diagnostician(
+            DiagnosticianType.PERFORMANCE,
+            JobPerformanceDiagnostician(
+                self._data_manager, self._job_args
+            ),
+            60,
         )
 
     def start_observing(self):

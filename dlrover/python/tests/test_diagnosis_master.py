@@ -22,6 +22,7 @@ from dlrover.python.common.constants import (
     NpuMetricEnum,
     PlatformType,
     PreCheckStatus,
+    RendezvousName,
 )
 from dlrover.python.common.global_context import Context
 from dlrover.python.common.metric.context import JobMetricContext
@@ -32,6 +33,7 @@ from dlrover.python.common.metric.monitor import (
 from dlrover.python.common.node import Node
 from dlrover.python.diagnosis.common.constants import (
     DiagnosisDataType,
+    DiagnosticianType,
 )
 from dlrover.python.diagnosis.common.diagnosis_action import (
     DiagnosisAction,
@@ -178,6 +180,28 @@ class DiagnosisMasterTest(unittest.TestCase):
             mgr.get_latest_sequence_id("PERFORMANCE_ISSUE"),
             third.sequence_id,
         )
+
+    def test_job_performance_diagnostician_registered(self):
+        mgr = DiagnosisMaster()
+        mgr._register_diagnosticians()
+        performance_diagnostician = mgr._diagnosticians[
+            DiagnosticianType.PERFORMANCE
+        ][0]
+        self.assertIsNotNone(performance_diagnostician)
+
+    def test_get_diagnosis_inputs_with_rdzv_snapshot(self):
+        rdzv_manager = MagicMock()
+        rdzv_manager.get_rdzv_snapshot.return_value = (
+            3,
+            [(0, 0), (1, 1)],
+        )
+        mgr = DiagnosisMaster(
+            rdzv_managers={RendezvousName.TRAINING: rdzv_manager}
+        )
+        inputs = mgr.get_diagnosis_inputs()
+        self.assertEqual(inputs["rdzv_epoch"], 3)
+        self.assertEqual(inputs["rdzv_node_ids"], [0, 1])
+        self.assertFalse(inputs["observing_paused"])
 
     def test_diagnosis_master_api(self):
         args = K8sJobArgs(PlatformType.KUBERNETES, "default", "test")
