@@ -94,11 +94,7 @@ from dlrover.python.diagnosis.common.constants import (
 )
 from dlrover.python.diagnosis.common.diagnosis_action import (
     DiagnosisAction,
-    EventAction,
-    NoAction,
     NodeAction,
-    JobAction,
-    ReportDiagnosisDataAction,
 )
 from dlrover.python.elastic_agent.config.paral_config_tuner import (
     ParalConfigTuner,
@@ -106,6 +102,9 @@ from dlrover.python.elastic_agent.config.paral_config_tuner import (
 from dlrover.python.elastic_agent.context import get_agent_context
 from dlrover.python.elastic_agent.diagnosis.diagnosis_agent import (
     DiagnosisAgent,
+)
+from dlrover.python.elastic_agent.diagnosis.action_executor import (
+    DiagnosisActionExecutor,
 )
 from dlrover.python.elastic_agent.master_client import MasterClient
 from dlrover.python.elastic_agent.monitor.training import TorchTrainingMonitor
@@ -128,7 +127,6 @@ from dlrover.python.util.numa_util import (
     get_npu_affinity,
     get_metaxgpu_affinity,
 )
-from dlrover.python.util.time_util import timestamp_diff_in_seconds
 from dlrover.trainer.torch.utils import (
     version_less_than_230,
     version_less_than_240,
@@ -734,6 +732,15 @@ class ElasticTrainingAgent(LocalElasticAgent):
             self._diagnose_agent = None
 
         self._agent_context = get_agent_context()
+        self._diagnosis_action_executor = DiagnosisActionExecutor(
+            agent_context=self._agent_context,
+            master_client=self._client,
+            restart_worker=self._restart_worker_for_diagnosis,
+            relaunch_worker=self._relaunch_worker_for_diagnosis,
+            collect_metric=self._collect_metric,
+            get_diagnosis_context=self._get_diagnosis_action_context,
+            node_id=env_utils.get_node_id(),
+        )
         self._rank_cpu_affinity = {}
         if self._config.numa_affinity:
             for rank in range(self._config.nproc_per_node):
@@ -1231,6 +1238,7 @@ class ElasticTrainingAgent(LocalElasticAgent):
     def _stop_workers(
         self, worker_group: WorkerGroup, is_restart=False, timeout=300
     ) -> None:
+        self._diagnosis_action_executor.on_workers_stopping()
         try:
             signal.signal(signal.SIGALRM, self._stop_timeout_handler)
             signal.alarm(timeout)
@@ -1549,104 +1557,27 @@ class ElasticTrainingAgent(LocalElasticAgent):
                 raise Exception(f"[{role}] worker group in {state.name} state")
 
     def _process_diagnosis_action(self, action: DiagnosisAction):
-        if not action:
-            return
-        action_type = action.action_type
-
-        if isinstance(action, NodeAction):
-            action.__class__ = NodeAction
-            logger.info(
-                f"Process diagnosis action: {action_type} {action.instance}"
-            )
-            if action_type == DiagnosisActionType.RESTART_WORKER:
-                if action.instance == DiagnosisConstant.LOCAL_INSTANCE:
-                    self._remaining_failovers -= 1
-                    logger.info(
-                        f"Decrement remaining FO to {self._remaining_failovers}"
-                    )
-                self._restart_workers(self._worker_group)
-            elif action_type == DiagnosisActionType.RELAUNCH_WORKER:
-                self._stop_workers(self._worker_group)
-                self._worker_group.state = WorkerState.FAILED
-            elif action_type == DiagnosisActionType.COLLECT_METRIC:
-                self._collect_metric()
-        elif isinstance(action, ReportDiagnosisDataAction):
-            logger.info(
-                "Report diagnosis data to master: %s (%s)",
-                action.data_cls,
-                action.reason,
-            )
-            try:
-                response = self._client.report_diagnosis_data(
-                    action.data_cls,
-                    action.data_content,
-                    action.node_rank,
-                    report_id=action.report_id,
-                    data_type=action.data_type,
-                    schema_version=action.schema_version,
-                )
-            except Exception as error:
-                logger.warning(
-                    f"Failed to report diagnosis data: {error}"
-                )
-                if not action.is_expired():
-                    self._agent_context.enqueue_diagnosis_action(action)
-                return
-
-            if response is None:
-                logger.warning(
-                    "Master did not acknowledge diagnosis data report."
-                )
-                if not action.is_expired():
-                    self._agent_context.enqueue_diagnosis_action(action)
-            elif not response.success:
-                logger.warning(
-                    f"Master rejected diagnosis data report "
-                    f"{action.report_id or action.data_cls}."
-                )
-        elif isinstance(action, EventAction):
-            action.__class__ = EventAction
-            labels = action.event_labels
-            if labels is None:
-                labels = {}
-            self._client.report_event(
-                event_type=action.event_type,
-                instance=action.event_instance,
-                action=action.event_action,
-                msg=action.event_msg,
-                labels=labels,
-            )
-        elif isinstance(action, JobAction):
-            logger.info(
-                f"Report job action to master for following process: {action_type}."
-            )
-            self._client.report_action(action)
+        return self._diagnosis_action_executor.execute(action)
 
     def _check_and_process_diagnosis_action(self):
-        for instance in [
-            DiagnosisConstant.LOCAL_INSTANCE,
-            DiagnosisConstant.ANY_WORKER_INSTANCE,
-            env_utils.get_node_id(),
-        ]:
-            action = self._agent_context.next_diagnosis_action(instance)
-            if isinstance(action, NoAction):
-                continue
-            logger.info(f"Start processing diagnosis action: {action}")
-            self._process_diagnosis_action(action)
-            # avoid to execute the same event action too frequently
-            if isinstance(action, EventAction) and not action.is_expired():
-                time_diff = timestamp_diff_in_seconds(
-                    action.timestamp, datetime.now().timestamp()
-                )
-                expired_time_period = action.expired_time_period - time_diff
-                if expired_time_period < 0:
-                    expired_time_period = 0
-                action.update_timestamp(
-                    timestamp=datetime.now().timestamp(),
-                    expired_time_period=expired_time_period,
-                    executable_time_period=expired_time_period + 60,
-                )
-                self._agent_context.enqueue_diagnosis_action(action)
+        self._diagnosis_action_executor.poll()
+
+    def _restart_worker_for_diagnosis(self, action):
+        if action.instance == DiagnosisConstant.LOCAL_INSTANCE:
+            self._remaining_failovers -= 1
+            logger.info(
+                f"Decrement remaining FO to {self._remaining_failovers}"
+            )
+        self._restart_workers(self._worker_group)
+
+    def _relaunch_worker_for_diagnosis(self, action):
+        self._stop_workers(self._worker_group)
+        self._worker_group.state = WorkerState.FAILED
+
+    def _get_diagnosis_action_context(self):
+        if self._diagnose_agent is None:
+            return {}
+        return self._diagnose_agent.get_diagnosis_inputs()
 
     def _wait_async_saver(self):
         """
@@ -1840,6 +1771,7 @@ class ElasticTrainingAgent(LocalElasticAgent):
 
     def stop_executor(self):
         """Shutdown the executor to save the checkpoint."""
+        self._diagnosis_action_executor.shutdown()
         self._save_ckpt_executor.shutdown(wait=False)
 
     def sync_training_ports(

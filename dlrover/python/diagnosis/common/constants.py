@@ -14,6 +14,8 @@
 
 class EnvConfigKey(object):
     XPU_TIMER_PORT = "XPU_TIMER_PORT"
+    XPU_TIMER_CONTROL_PORT = "XPU_TIMER_CONTROL_PORT"
+    XPU_TIMER_CONTROL_URL = "XPU_TIMER_CONTROL_URL"
 
 
 class InferenceConfigKey(object):
@@ -37,6 +39,8 @@ class DiagnosisConstant(object):
     CHECK_TENSOR_DEFAULT_RECORDS = 30
 
     AGENT_PERIODICALLY_REPORT_INTERVAL_SECS = 15
+    PROFILING_DEFAULT_DURATION_SECS = 180
+    PROFILING_MAX_DURATION_SECS = 600
     MASTER_INSTANCE = -1  # do action by master instance only
     ANY_WORKER_INSTANCE = -2  # do action by any worker instance
     LOCAL_INSTANCE = -3  # do action by the current instance(master or worker)
