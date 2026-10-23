@@ -32,11 +32,14 @@ from dlrover.python.common.metric.monitor import (
 )
 from dlrover.python.common.node import Node
 from dlrover.python.diagnosis.common.constants import (
+    DiagnosisActionType,
+    DiagnosisConstant,
     DiagnosisDataType,
     DiagnosticianType,
 )
 from dlrover.python.diagnosis.common.diagnosis_action import (
     DiagnosisAction,
+    NodeAction,
     NoAction,
 )
 from dlrover.python.diagnosis.common.diagnosis_data import (
@@ -202,6 +205,115 @@ class DiagnosisMasterTest(unittest.TestCase):
         self.assertEqual(inputs["rdzv_epoch"], 3)
         self.assertEqual(inputs["rdzv_node_ids"], [0, 1])
         self.assertFalse(inputs["observing_paused"])
+
+    def test_action_interval_limits_profiling_broadcast(self):
+        self.assertEqual(
+            DiagnosisConstant.PROFILING_ACTION_INTERVAL_SECS, 1800
+        )
+        mgr = DiagnosisMaster(
+            action_intervals={
+                DiagnosisActionType.ENABLE_PROFILING: 60,
+            }
+        )
+        mgr._context = MagicMock()
+        mgr._context.enqueue_diagnosis_action.return_value = True
+
+        def profiling_actions(group):
+            return [
+                NodeAction(
+                    node_id=node_id,
+                    node_type="worker",
+                    instance=node_id,
+                    action_type=DiagnosisActionType.ENABLE_PROFILING,
+                    action_id=f"{group}-{node_id}",
+                    action_group_id=group,
+                )
+                for node_id in range(3)
+            ]
+
+        with patch(
+            "dlrover.python.master.diagnosis.diagnosis_master.time.monotonic",
+            return_value=100,
+        ):
+            mgr.enqueue_diagnosis_actions(profiling_actions("group-1"))
+        self.assertEqual(
+            mgr._context.enqueue_diagnosis_action.call_count, 3
+        )
+
+        with patch(
+            "dlrover.python.master.diagnosis.diagnosis_master.time.monotonic",
+            return_value=159,
+        ):
+            mgr.enqueue_diagnosis_actions(profiling_actions("group-2"))
+        self.assertEqual(
+            mgr._context.enqueue_diagnosis_action.call_count, 3
+        )
+        mgr.enqueue_diagnosis_actions(
+            [
+                NodeAction(
+                    node_id=0,
+                    node_type="worker",
+                    instance=0,
+                    action_type=DiagnosisActionType.COLLECT_METRIC,
+                )
+            ]
+        )
+        self.assertEqual(
+            mgr._context.enqueue_diagnosis_action.call_count, 4
+        )
+
+        with patch(
+            "dlrover.python.master.diagnosis.diagnosis_master.time.monotonic",
+            return_value=160,
+        ):
+            mgr.enqueue_diagnosis_actions(profiling_actions("group-3"))
+        self.assertEqual(
+            mgr._context.enqueue_diagnosis_action.call_count, 7
+        )
+
+    def test_partial_action_enqueue_does_not_start_interval(self):
+        mgr = DiagnosisMaster(
+            action_intervals={
+                DiagnosisActionType.ENABLE_PROFILING: 60,
+            }
+        )
+        mgr._context = MagicMock()
+        mgr._context.enqueue_diagnosis_action.side_effect = [
+            True,
+            False,
+            True,
+            True,
+            True,
+            True,
+        ]
+
+        def profiling_actions(group):
+            return [
+                NodeAction(
+                    node_id=node_id,
+                    node_type="worker",
+                    instance=node_id,
+                    action_type=DiagnosisActionType.ENABLE_PROFILING,
+                    action_id=f"{group}-{node_id}",
+                    action_group_id=group,
+                )
+                for node_id in range(3)
+            ]
+
+        with patch(
+            "dlrover.python.master.diagnosis.diagnosis_master.time.monotonic",
+            return_value=100,
+        ):
+            mgr.enqueue_diagnosis_actions(profiling_actions("group-1"))
+        with patch(
+            "dlrover.python.master.diagnosis.diagnosis_master.time.monotonic",
+            return_value=101,
+        ):
+            mgr.enqueue_diagnosis_actions(profiling_actions("group-2"))
+
+        self.assertEqual(
+            mgr._context.enqueue_diagnosis_action.call_count, 6
+        )
 
     def test_diagnosis_master_api(self):
         args = K8sJobArgs(PlatformType.KUBERNETES, "default", "test")

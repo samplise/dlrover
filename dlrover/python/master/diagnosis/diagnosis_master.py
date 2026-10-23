@@ -13,7 +13,7 @@
 
 import threading
 import time
-from typing import Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from dlrover.python.common.constants import (
     EventReportConstants,
@@ -26,8 +26,11 @@ from dlrover.python.common.global_context import Context
 from dlrover.python.common.log import default_logger as logger
 from dlrover.python.common.metric.context import JobMetricContext
 from dlrover.python.diagnosis.common.constants import (
+    DiagnosisActionType,
+    DiagnosisConstant,
     DiagnosticianType,
 )
+from dlrover.python.diagnosis.common.diagnosis_action import DiagnosisAction
 from dlrover.python.diagnosis.common.diagnosis_data import DiagnosisData
 from dlrover.python.diagnosis.common.diagnosis_manager import DiagnosisManager
 from dlrover.python.diagnosis.diagnostician.node_inconsistency import (
@@ -67,6 +70,7 @@ class DiagnosisMaster(DiagnosisManager):
         self,
         job_args: Optional[JobArgs] = None,
         rdzv_managers=None,
+        action_intervals: Optional[Dict[str, int]] = None,
     ):
         self._is_observing_started = False
         self._is_observing_paused = False
@@ -82,6 +86,26 @@ class DiagnosisMaster(DiagnosisManager):
         self._reporter = get_event_reporter()
         self._metric_monitor = None
         self._lock = threading.Lock()
+        if action_intervals is None:
+            action_intervals = {
+                DiagnosisActionType.ENABLE_PROFILING: (
+                    DiagnosisConstant.PROFILING_ACTION_INTERVAL_SECS
+                )
+            }
+        self._action_intervals: Dict[str, int] = {}
+        for action_type, interval in action_intervals.items():
+            try:
+                interval_seconds = int(interval)
+            except (TypeError, ValueError):
+                logger.warning(
+                    f"Invalid action interval {interval} for "
+                    f"{action_type}; rate limiting is disabled."
+                )
+                continue
+            if interval_seconds > 0:
+                self._action_intervals[action_type] = interval_seconds
+        self._last_action_issued_at: Dict[str, float] = {}
+        self._action_gate_lock = threading.Lock()
 
         super().__init__(self._job_context)
 
@@ -110,6 +134,40 @@ class DiagnosisMaster(DiagnosisManager):
             node_type=node_type,
             node_rank=node_rank,
         )
+
+    def enqueue_diagnosis_actions(self, actions: List[DiagnosisAction]):
+        grouped_actions: Dict[str, List[DiagnosisAction]] = {}
+        for action in actions:
+            if not action or action.action_type == DiagnosisActionType.NONE:
+                continue
+            grouped_actions.setdefault(action.action_type, []).append(action)
+
+        with self._action_gate_lock:
+            now = time.monotonic()
+            for action_type, typed_actions in grouped_actions.items():
+                interval = self._action_intervals.get(action_type, 0)
+                last_issued_at = self._last_action_issued_at.get(action_type)
+                if (
+                    interval > 0
+                    and last_issued_at is not None
+                    and now - last_issued_at < interval
+                ):
+                    remaining = interval - (now - last_issued_at)
+                    logger.info(
+                        f"Ignore diagnosis action type {action_type}: "
+                        f"rate-limit window has {remaining:.1f}s remaining."
+                    )
+                    continue
+
+                all_accepted = True
+                for action in typed_actions:
+                    accepted = self._context.enqueue_diagnosis_action(
+                        action
+                    )
+                    if not accepted:
+                        all_accepted = False
+                if interval > 0 and all_accepted:
+                    self._last_action_issued_at[action_type] = now
 
     def _report_event(self, event_type, instance, action, msg="", labels=None):
         if labels is None:
