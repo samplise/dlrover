@@ -100,7 +100,7 @@ class DiagnosisAgent(Singleton, DiagnosisManager):
         self.register_diagnostician(
             DiagnosticianType.PERFORMANCE,
             PerformanceDiagnostician(),
-            10,
+            60,
         )
 
         # register periodical data collector
