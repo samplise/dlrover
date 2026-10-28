@@ -53,15 +53,10 @@ class DiagnosisActionExecutor:
         self._restart_worker = restart_worker
         self._relaunch_worker = relaunch_worker
         self._collect_metric = collect_metric
-        self._get_diagnosis_context = (
-            get_diagnosis_context or (lambda: {})
-        )
-        self._node_id = (
-            env_utils.get_node_id() if node_id is None else node_id
-        )
-        self._profiler_controller = (
-            profiler_controller
-            or ProfilerController(node_id=self._node_id)
+        self._get_diagnosis_context = get_diagnosis_context or (lambda: {})
+        self._node_id = env_utils.get_node_id() if node_id is None else node_id
+        self._profiler_controller = profiler_controller or ProfilerController(
+            node_id=self._node_id
         )
 
     def poll(self):
@@ -121,9 +116,7 @@ class DiagnosisActionExecutor:
                 current_rdzv_epoch=context.get("rdzv_epoch"),
             )
 
-        logger.warning(
-            f"Unsupported node action type: {action_type}"
-        )
+        logger.warning(f"Unsupported node action type: {action_type}")
         return False
 
     def _report_diagnosis_data(self, action):
@@ -148,9 +141,7 @@ class DiagnosisActionExecutor:
             return False
 
         if response is None:
-            logger.warning(
-                "Master did not acknowledge diagnosis data report."
-            )
+            logger.warning("Master did not acknowledge diagnosis data report.")
             if not action.is_expired():
                 self._agent_context.enqueue_diagnosis_action(action)
             return False

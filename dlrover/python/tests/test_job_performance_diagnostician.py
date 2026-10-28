@@ -116,25 +116,18 @@ class JobPerformanceDiagnosticianTest(unittest.TestCase):
 
         self.assertEqual(len(actions), 3)
         self.assertTrue(all(isinstance(a, NodeAction) for a in actions))
-        self.assertEqual(
-            {action.instance for action in actions}, {0, 1, 2}
-        )
+        self.assertEqual({action.instance for action in actions}, {0, 1, 2})
         self.assertTrue(
             all(
-                action.action_type
-                == DiagnosisActionType.ENABLE_PROFILING
+                action.action_type == DiagnosisActionType.ENABLE_PROFILING
                 for action in actions
             )
         )
-        self.assertEqual(
-            len({action.action_id for action in actions}), 3
-        )
+        self.assertEqual(len({action.action_id for action in actions}), 3)
         self.assertEqual(
             len({action.action_group_id for action in actions}), 1
         )
-        self.assertTrue(
-            all(action.rdzv_epoch == 2 for action in actions)
-        )
+        self.assertTrue(all(action.rdzv_epoch == 2 for action in actions))
         self.assertTrue(
             all(
                 action.parameters["duration_seconds"] == "180"
@@ -160,9 +153,7 @@ class JobPerformanceDiagnosticianTest(unittest.TestCase):
         actions = self.diagnostician.diagnose(**self._context())
         self.assertEqual(len(actions), 3)
         rounds = list(self.diagnostician.rounds.values())
-        self.assertEqual(
-            rounds[0].source_report_ids, ["report-1", "report-2"]
-        )
+        self.assertEqual(rounds[0].source_report_ids, ["report-1", "report-2"])
 
         stale_data_manager = DiagnosisDataManager(expire_time_period=1800)
         another = JobPerformanceDiagnostician(stale_data_manager)
@@ -206,9 +197,7 @@ class JobPerformanceDiagnosticianTest(unittest.TestCase):
         context["observing_paused"] = True
         result = self.diagnostician.diagnose(**context)
         self.assertIsInstance(result[0], NoAction)
-        self.assertEqual(
-            self.diagnostician.last_processed_sequence_id, 0
-        )
+        self.assertEqual(self.diagnostician.last_processed_sequence_id, 0)
 
         context["observing_paused"] = False
         actions = self.diagnostician.diagnose(**context)

@@ -161,9 +161,7 @@ class DiagnosisMaster(DiagnosisManager):
 
                 all_accepted = True
                 for action in typed_actions:
-                    accepted = self._context.enqueue_diagnosis_action(
-                        action
-                    )
+                    accepted = self._context.enqueue_diagnosis_action(action)
                     if not accepted:
                         all_accepted = False
                 if interval > 0 and all_accepted:
@@ -389,17 +387,13 @@ class DiagnosisMaster(DiagnosisManager):
     def get_diagnosis_inputs(self) -> Dict[str, Any]:
         rdzv_epoch = None
         rdzv_node_ids = None
-        rdzv_manager = self._rdzv_managers.get(
-            RendezvousName.TRAINING
-        )
+        rdzv_manager = self._rdzv_managers.get(RendezvousName.TRAINING)
         if rdzv_manager is not None:
             rdzv_epoch, rdzv_nodes = rdzv_manager.get_rdzv_snapshot()
             rdzv_node_ids = [node_id for node_id, _ in rdzv_nodes]
         return {
             "job_nodes": self._job_context.dup_job_nodes(),
-            "job_uid": (
-                self._job_args.job_uuid if self._job_args else ""
-            ),
+            "job_uid": (self._job_args.job_uuid if self._job_args else ""),
             "rdzv_epoch": rdzv_epoch,
             "rdzv_node_ids": rdzv_node_ids,
             "observing_paused": self._is_observing_paused,
@@ -420,9 +414,7 @@ class DiagnosisMaster(DiagnosisManager):
 
         self.register_diagnostician(
             DiagnosticianType.PERFORMANCE,
-            JobPerformanceDiagnostician(
-                self._data_manager, self._job_args
-            ),
+            JobPerformanceDiagnostician(self._data_manager, self._job_args),
             60,
         )
 

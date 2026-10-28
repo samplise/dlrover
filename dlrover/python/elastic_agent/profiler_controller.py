@@ -54,23 +54,15 @@ class ProfilerController:
         stop_retry_interval_seconds=DEFAULT_STOP_RETRY_INTERVAL_SECONDS,
         post_func=None,
     ):
-        self._node_id = (
-            env_utils.get_node_id() if node_id is None else node_id
-        )
+        self._node_id = env_utils.get_node_id() if node_id is None else node_id
         self._control_url = control_url or self._get_control_url()
-        self._default_duration_seconds = max(
-            1, default_duration_seconds
-        )
+        self._default_duration_seconds = max(1, default_duration_seconds)
         self._max_duration_seconds = max(
             self._default_duration_seconds, max_duration_seconds
         )
-        self._request_timeout_seconds = max(
-            0.1, request_timeout_seconds
-        )
+        self._request_timeout_seconds = max(0.1, request_timeout_seconds)
         self._request_retries = max(1, request_retries)
-        self._stop_retry_interval_seconds = max(
-            0, stop_retry_interval_seconds
-        )
+        self._stop_retry_interval_seconds = max(0, stop_retry_interval_seconds)
         self._post_func = post_func or requests.post
         self._lock = threading.RLock()
         self._active_action_id = ""
@@ -191,8 +183,7 @@ class ProfilerController:
             self._set_enabled(False)
         except Exception as error:
             logger.warning(
-                f"Failed to disable profiling for action "
-                f"{action_id}: {error}"
+                f"Failed to disable profiling for action {action_id}: {error}"
             )
             self._clear_active_session(action_id)
             return False
@@ -274,9 +265,7 @@ class ProfilerController:
             duration = self._max_duration_seconds
         return duration
 
-    def _validation_error(
-        self, action, current_run_id, current_rdzv_epoch
-    ):
+    def _validation_error(self, action, current_run_id, current_rdzv_epoch):
         if not isinstance(action, NodeAction):
             return "action is not a NodeAction"
         if action.action_type != DiagnosisActionType.ENABLE_PROFILING:
@@ -308,15 +297,11 @@ class ProfilerController:
 
     @staticmethod
     def _get_control_url():
-        configured_url = env_utils.get_env(
-            EnvConfigKey.XPU_TIMER_CONTROL_URL
-        )
+        configured_url = env_utils.get_env(EnvConfigKey.XPU_TIMER_CONTROL_URL)
         if configured_url:
             return configured_url
 
-        control_port = env_utils.get_env(
-            EnvConfigKey.XPU_TIMER_CONTROL_PORT
-        )
+        control_port = env_utils.get_env(EnvConfigKey.XPU_TIMER_CONTROL_PORT)
         if control_port:
             port = (
                 ProfilerController._parse_port(control_port)
@@ -326,15 +311,10 @@ class ProfilerController:
             metric_port = env_utils.get_env(EnvConfigKey.XPU_TIMER_PORT)
             port = DEFAULT_XPU_TIMER_CONTROL_PORT
             if metric_port:
-                metric_port_value = ProfilerController._parse_port(
-                    metric_port
-                )
+                metric_port_value = ProfilerController._parse_port(metric_port)
                 if metric_port_value > 1:
                     port = metric_port_value - 1
-        return (
-            f"http://127.0.0.1:{port}"
-            "/HostingService/UpdateCuptiState"
-        )
+        return f"http://127.0.0.1:{port}/HostingService/UpdateCuptiState"
 
     @staticmethod
     def _parse_port(value):

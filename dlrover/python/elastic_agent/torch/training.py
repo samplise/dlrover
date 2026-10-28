@@ -876,9 +876,7 @@ class ElasticTrainingAgent(LocalElasticAgent):
             self._diagnose_agent.update_config(
                 rank=self._node_rank,
                 run_id=run_id,
-                rdzv_epoch=rdzv_epoch
-                if isinstance(rdzv_epoch, int)
-                else 0,
+                rdzv_epoch=rdzv_epoch if isinstance(rdzv_epoch, int) else 0,
             )
         self._store = store
         group_world_size = len(world)

@@ -96,9 +96,7 @@ class JobPerformanceDiagnostician(Diagnostician):
         super().__init__(job_args)
         self._data_manager = data_manager
         self._last_processed_sequence_id = 0
-        self._correlation_window_seconds = max(
-            0, correlation_window_seconds
-        )
+        self._correlation_window_seconds = max(0, correlation_window_seconds)
         self._pending_action_timeout_seconds = max(
             1, pending_action_timeout_seconds
         )
@@ -191,14 +189,10 @@ class JobPerformanceDiagnostician(Diagnostician):
         ]
         # The existing in-memory diagnosis queue receives these actions
         # immediately after resolve returns.
-        performance.queued_action_ids = list(
-            performance.planned_action_ids
-        )
+        performance.queued_action_ids = list(performance.planned_action_ids)
         performance.state = DiagnosisState.ACTION
         performance.updated_at = int(time.time())
-        performance.explanation = (
-            "profiling requested for all active workers"
-        )
+        performance.explanation = "profiling requested for all active workers"
         performance.state = DiagnosisState.CLOSED
         logger.info(
             f"Request profiling for performance {performance_id} "
@@ -215,16 +209,10 @@ class JobPerformanceDiagnostician(Diagnostician):
         observed_at = self._report_observed_at(report)
         performance = self._find_correlated_round(report, observed_at)
         if performance is None:
-            performance = self._new_round(
-                report, observed_at, now
-            )
+            performance = self._new_round(report, observed_at, now)
 
-        self._add_unique(
-            performance.source_report_ids, report.report_id
-        )
-        self._add_unique(
-            performance.source_node_ids, report.node_id
-        )
+        self._add_unique(performance.source_report_ids, report.report_id)
+        self._add_unique(performance.source_node_ids, report.node_id)
         self._add_unique(performance.issue_types, report.issue_type)
         performance.updated_at = now
 
@@ -305,8 +293,7 @@ class JobPerformanceDiagnostician(Diagnostician):
                 performance.job_uid != self._effective_job_uid(report)
                 or performance.run_id != report.run_id
                 or performance.rdzv_epoch != report.rdzv_epoch
-                or performance.config_fingerprint
-                != report.config_fingerprint
+                or performance.config_fingerprint != report.config_fingerprint
                 or report.issue_type not in performance.issue_types
             ):
                 continue
@@ -329,10 +316,7 @@ class JobPerformanceDiagnostician(Diagnostician):
             return "report job does not match current job"
 
         current_epoch = context.get("rdzv_epoch")
-        if (
-            current_epoch is not None
-            and report.rdzv_epoch != current_epoch
-        ):
+        if current_epoch is not None and report.rdzv_epoch != current_epoch:
             return "report rendezvous epoch is stale"
 
         current_run_id = context.get("run_id")
@@ -352,9 +336,7 @@ class JobPerformanceDiagnostician(Diagnostician):
         if report.baseline_value is not None and report.baseline_value <= 0:
             return "report baseline is not positive"
 
-        workers = (context.get("job_nodes") or {}).get(
-            NodeType.WORKER, {}
-        )
+        workers = (context.get("job_nodes") or {}).get(NodeType.WORKER, {})
         source_node = workers.get(report.node_id)
         if (
             source_node is None
@@ -364,21 +346,16 @@ class JobPerformanceDiagnostician(Diagnostician):
             return "report source worker is not active"
 
         rdzv_node_ids = context.get("rdzv_node_ids")
-        if (
-            rdzv_node_ids is not None
-            and report.node_id not in set(rdzv_node_ids)
+        if rdzv_node_ids is not None and report.node_id not in set(
+            rdzv_node_ids
         ):
             return "report source worker is not in current rendezvous"
         return ""
 
     def _active_workers(self, context):
-        workers = (context.get("job_nodes") or {}).get(
-            NodeType.WORKER, {}
-        )
+        workers = (context.get("job_nodes") or {}).get(NodeType.WORKER, {})
         rdzv_node_ids = context.get("rdzv_node_ids")
-        allowed_ids = (
-            set(rdzv_node_ids) if rdzv_node_ids is not None else None
-        )
+        allowed_ids = set(rdzv_node_ids) if rdzv_node_ids is not None else None
         active = []
         for node_id in sorted(workers):
             node = workers[node_id]
@@ -410,9 +387,7 @@ class JobPerformanceDiagnostician(Diagnostician):
                     node_id=node.id,
                     node_type=node.type,
                     node_status=node.status,
-                    reason=(
-                        DiagnosisErrorConstant.TRAINING_SPEED_DEGRADATION
-                    ),
+                    reason=(DiagnosisErrorConstant.TRAINING_SPEED_DEGRADATION),
                     instance=node.id,
                     action_type=DiagnosisActionType.ENABLE_PROFILING,
                     expired_time_period=self._action_expiry_seconds,
@@ -482,9 +457,7 @@ class JobPerformanceDiagnostician(Diagnostician):
 
     def _discard_ready_round(self, performance_id):
         self._ready_rounds = deque(
-            item
-            for item in self._ready_rounds
-            if item != performance_id
+            item for item in self._ready_rounds if item != performance_id
         )
 
     @staticmethod
@@ -499,4 +472,3 @@ class JobPerformanceDiagnostician(Diagnostician):
     @staticmethod
     def _report_observed_at(report):
         return report.last_timestamp or report.received_at or report.timestamp
-

@@ -100,12 +100,8 @@ class TestPerformanceDiagnostician(unittest.TestCase):
         serialized_action = ReportDiagnosisDataAction.from_json(
             actions[0].to_json()
         )
-        self.assertEqual(
-            serialized_action.report_id, actions[0].report_id
-        )
-        self.assertEqual(
-            serialized_action.data_type, actions[0].data_type
-        )
+        self.assertEqual(serialized_action.report_id, actions[0].report_id)
+        self.assertEqual(serialized_action.data_type, actions[0].data_type)
 
         repeated_actions = diagnostician.resolve(
             observation,
@@ -116,9 +112,7 @@ class TestPerformanceDiagnostician(unittest.TestCase):
             rdzv_epoch=2,
             config_fingerprint="config-1",
         )
-        self.assertEqual(
-            repeated_actions[0].report_id, actions[0].report_id
-        )
+        self.assertEqual(repeated_actions[0].report_id, actions[0].report_id)
         self.assertEqual(
             repeated_actions[0].data_content, actions[0].data_content
         )

@@ -486,8 +486,7 @@ class DiagnosisActionQueue:
                 if duplicate:
                     return True
                 was_full = (
-                    len(actions)
-                    == DiagnosisConstant.MAX_ACTION_QUEUE_SIZE
+                    len(actions) == DiagnosisConstant.MAX_ACTION_QUEUE_SIZE
                 )
                 actions.append(new_action)
                 if was_full:

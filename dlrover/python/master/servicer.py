@@ -829,18 +829,14 @@ class MasterServicer(ABC):
             return False
         if (
             message.schema_version != DIAGNOSIS_DATA_SCHEMA_VERSION
-            or data_obj.schema_version
-            != DIAGNOSIS_DATA_SCHEMA_VERSION
+            or data_obj.schema_version != DIAGNOSIS_DATA_SCHEMA_VERSION
             or message.schema_version != data_obj.schema_version
         ):
             logger.warning("Unsupported diagnosis report schema version.")
             return False
 
         if message.report_id:
-            if (
-                data_obj.report_id
-                and data_obj.report_id != message.report_id
-            ):
+            if data_obj.report_id and data_obj.report_id != message.report_id:
                 logger.warning("Diagnosis report ID mismatch.")
                 return False
             if not data_obj.report_id:
@@ -867,10 +863,7 @@ class MasterServicer(ABC):
                 return False
             job_uid = getattr(data_obj, "job_uid", "")
             job_args = self._diagnosis_manager.job_args
-            if (
-                job_args is not None
-                and job_uid != job_args.job_uuid
-            ):
+            if job_args is not None and job_uid != job_args.job_uuid:
                 logger.warning("Performance report has an invalid job UID.")
                 return False
 
@@ -900,8 +893,7 @@ class MasterServicer(ABC):
         )
         if result not in (STORE_ACCEPTED, STORE_DUPLICATE):
             logger.warning(
-                f"Reject diagnosis data report {data_obj.report_id}: "
-                f"{result}."
+                f"Reject diagnosis data report {data_obj.report_id}: {result}."
             )
             return False
         return True

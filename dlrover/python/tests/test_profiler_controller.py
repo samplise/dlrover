@@ -35,8 +35,7 @@ class ProfilerControllerTest(unittest.TestCase):
         return ProfilerController(
             node_id=0,
             control_url=(
-                "http://127.0.0.1:18888/"
-                "HostingService/UpdateCuptiState"
+                "http://127.0.0.1:18888/HostingService/UpdateCuptiState"
             ),
             request_retries=1,
             stop_retry_interval_seconds=0,
@@ -87,8 +86,7 @@ class ProfilerControllerTest(unittest.TestCase):
         )
         self.assertEqual(
             self.post.call_args_list[0].args[0],
-            "http://127.0.0.1:18888/"
-            "HostingService/UpdateCuptiState",
+            "http://127.0.0.1:18888/HostingService/UpdateCuptiState",
         )
         self.assertEqual(self.post.call_count, 1)
 

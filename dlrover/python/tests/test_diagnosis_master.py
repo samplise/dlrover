@@ -236,18 +236,14 @@ class DiagnosisMasterTest(unittest.TestCase):
             return_value=100,
         ):
             mgr.enqueue_diagnosis_actions(profiling_actions("group-1"))
-        self.assertEqual(
-            mgr._context.enqueue_diagnosis_action.call_count, 3
-        )
+        self.assertEqual(mgr._context.enqueue_diagnosis_action.call_count, 3)
 
         with patch(
             "dlrover.python.master.diagnosis.diagnosis_master.time.monotonic",
             return_value=159,
         ):
             mgr.enqueue_diagnosis_actions(profiling_actions("group-2"))
-        self.assertEqual(
-            mgr._context.enqueue_diagnosis_action.call_count, 3
-        )
+        self.assertEqual(mgr._context.enqueue_diagnosis_action.call_count, 3)
         mgr.enqueue_diagnosis_actions(
             [
                 NodeAction(
@@ -258,18 +254,14 @@ class DiagnosisMasterTest(unittest.TestCase):
                 )
             ]
         )
-        self.assertEqual(
-            mgr._context.enqueue_diagnosis_action.call_count, 4
-        )
+        self.assertEqual(mgr._context.enqueue_diagnosis_action.call_count, 4)
 
         with patch(
             "dlrover.python.master.diagnosis.diagnosis_master.time.monotonic",
             return_value=160,
         ):
             mgr.enqueue_diagnosis_actions(profiling_actions("group-3"))
-        self.assertEqual(
-            mgr._context.enqueue_diagnosis_action.call_count, 7
-        )
+        self.assertEqual(mgr._context.enqueue_diagnosis_action.call_count, 7)
 
     def test_partial_action_enqueue_does_not_start_interval(self):
         mgr = DiagnosisMaster(
@@ -311,9 +303,7 @@ class DiagnosisMasterTest(unittest.TestCase):
         ):
             mgr.enqueue_diagnosis_actions(profiling_actions("group-2"))
 
-        self.assertEqual(
-            mgr._context.enqueue_diagnosis_action.call_count, 6
-        )
+        self.assertEqual(mgr._context.enqueue_diagnosis_action.call_count, 6)
 
     def test_diagnosis_master_api(self):
         args = K8sJobArgs(PlatformType.KUBERNETES, "default", "test")

@@ -62,9 +62,7 @@ class DiagnosisDataManager:
         self._expire_time_period = expire_time_period
         self._max_records_per_type = max(1, max_records_per_type)
         self._max_report_size = max(1, max_report_size)
-        self._max_total_bytes = max(
-            self._max_report_size, max_total_bytes
-        )
+        self._max_total_bytes = max(self._max_report_size, max_total_bytes)
         self._job_context = get_job_context()
         self._lock = threading.Lock()
 
@@ -104,9 +102,8 @@ class DiagnosisDataManager:
         ):
             return STORE_REJECTED
 
-        if (
-            data.data_type == DiagnosisDataType.PERFORMANCE_ISSUE
-            and (node_id is None or node_id < 0)
+        if data.data_type == DiagnosisDataType.PERFORMANCE_ISSUE and (
+            node_id is None or node_id < 0
         ):
             return STORE_REJECTED
 
@@ -143,9 +140,7 @@ class DiagnosisDataManager:
 
             received_at = int(time.time())
             self._next_sequence_id += 1
-            data.set_storage_metadata(
-                received_at, self._next_sequence_id
-            )
+            data.set_storage_metadata(received_at, self._next_sequence_id)
             reports.append(data)
             self._data_bytes[data_type] += report_size
             self._latest_sequence_ids[data_type] = data.sequence_id
@@ -208,10 +203,7 @@ class DiagnosisDataManager:
         reports = self.data[data_type]
         while len(reports) > self._max_records_per_type:
             self._remove_oldest_locked(data_type)
-        while (
-            self._data_bytes[data_type] > self._max_total_bytes
-            and reports
-        ):
+        while self._data_bytes[data_type] > self._max_total_bytes and reports:
             self._remove_oldest_locked(data_type)
 
     def _remove_oldest_locked(self, data_type: str):

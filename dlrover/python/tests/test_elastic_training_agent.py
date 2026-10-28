@@ -1476,9 +1476,7 @@ class ElasticTrainingAgentRunTest(unittest.TestCase):
         )
         agent._stop_workers = mock.MagicMock(return_value=True)
         agent._restart_workers = mock.MagicMock(return_value=True)
-        execute_diagnosis_action = (
-            agent._diagnosis_action_executor.execute
-        )
+        execute_diagnosis_action = agent._diagnosis_action_executor.execute
         agent._diagnosis_action_executor.execute = mock.MagicMock(
             return_value=True
         )

@@ -50,9 +50,7 @@ _NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 _TIMESTAMP_PATTERN = re.compile(
     r"\[(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)\]"
 )
-_ITERATION_PATTERN = re.compile(
-    r"\biteration\s*:?\s*(\d+)", re.IGNORECASE
-)
+_ITERATION_PATTERN = re.compile(r"\biteration\s*:?\s*(\d+)", re.IGNORECASE)
 _THROUGHPUT_PATTERN = re.compile(
     rf"throughput\s+per\s+GPU\s*\(TFLOP/s/GPU\)\s*:\s*({_NUMBER})",
     re.IGNORECASE,
@@ -289,7 +287,9 @@ class PerformanceDiagnostician(Diagnostician):
     PerformanceIssue/PerformanceDiagnosisData structures are reused.
     """
 
-    def __init__(self, config: Optional[PerformanceDiagnosticianConfig] = None):
+    def __init__(
+        self, config: Optional[PerformanceDiagnosticianConfig] = None
+    ):
         super().__init__()
         self._config = config or PerformanceDiagnosticianConfig()
         self._history = PerformanceHistory(
@@ -299,7 +299,7 @@ class PerformanceDiagnostician(Diagnostician):
         self._healthy_records: Deque[PerformanceRecord] = deque(
             maxlen=max(1, self._config.baseline_window_size)
         )
-        
+
         self._issue_reported = False
 
     @property
@@ -337,9 +337,7 @@ class PerformanceDiagnostician(Diagnostician):
         # future performance checks.  The first segment contains the log
         # prefix and iteration number, so it is deliberately excluded.
         for segment in log_line.split("|")[1:]:
-            match = re.search(
-                rf"([^:|]+):\s*({_NUMBER})\s*$", segment.strip()
-            )
+            match = re.search(rf"([^:|]+):\s*({_NUMBER})\s*$", segment.strip())
             if not match:
                 continue
             metric_name = _normalise_metric_name(match.group(1))
@@ -364,7 +362,9 @@ class PerformanceDiagnostician(Diagnostician):
 
         logs = kwargs.get("logs")
         if logs is not None:
-            if isinstance(logs, (str, bytes)) or not isinstance(logs, Iterable):
+            if isinstance(logs, (str, bytes)) or not isinstance(
+                logs, Iterable
+            ):
                 return None
             return TrainingLog(logs=[str(log) for log in logs])
 
@@ -415,8 +415,7 @@ class PerformanceDiagnostician(Diagnostician):
         return [
             item
             for item in self._history.records
-            if item.throughput is not None
-            and start <= item.timestamp <= now
+            if item.throughput is not None and start <= item.timestamp <= now
         ]
 
     # Rule A -- frequent/moderate degradation.
@@ -453,9 +452,7 @@ class PerformanceDiagnostician(Diagnostician):
         records = self._throughput_records_in_window(
             now, self._config.severe_window_seconds
         )
-        if len(records) < max(
-            1, self._config.minimum_severe_window_records
-        ):
+        if len(records) < max(1, self._config.minimum_severe_window_records):
             return False, None, 0.0, []
 
         threshold = self._severe_threshold(baseline)
@@ -570,10 +567,7 @@ class PerformanceDiagnostician(Diagnostician):
                 # Only feed a recovered/healthy value back into the healthy
                 # baseline. This prevents an active incident from pulling the
                 # baseline downward.
-                if (
-                    normal_threshold is None
-                    or throughput >= normal_threshold
-                ):
+                if normal_threshold is None or throughput >= normal_threshold:
                     self._add_healthy_record(record)
             return None
 
@@ -651,24 +645,16 @@ class PerformanceDiagnostician(Diagnostician):
         except (TypeError, ValueError, json.JSONDecodeError):
             return [NoAction()]
 
-        job_uid = str(
-            kwargs.get("job_uid", env_utils.get_job_uid()) or ""
-        )
+        job_uid = str(kwargs.get("job_uid", env_utils.get_job_uid()) or "")
         run_id = str(
             kwargs.get("run_id")
             or env_utils.get_env("TORCHELASTIC_RUN_ID")
             or ""
         )
         rdzv_epoch = int(kwargs.get("rdzv_epoch", 0) or 0)
-        config_fingerprint = str(
-            kwargs.get("config_fingerprint", "") or ""
-        )
-        node_id = int(
-            kwargs.get("node_id", env_utils.get_node_id())
-        )
-        node_rank = int(
-            kwargs.get("node_rank", env_utils.get_node_rank())
-        )
+        config_fingerprint = str(kwargs.get("config_fingerprint", "") or "")
+        node_id = int(kwargs.get("node_id", env_utils.get_node_id()))
+        node_rank = int(kwargs.get("node_rank", env_utils.get_node_rank()))
         report_key = ":".join(
             [
                 job_uid,
@@ -719,4 +705,3 @@ class PerformanceDiagnostician(Diagnostician):
                 schema_version=data.schema_version,
             )
         ]
-

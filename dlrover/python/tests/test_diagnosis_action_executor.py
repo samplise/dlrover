@@ -63,12 +63,10 @@ class DiagnosisActionExecutorTest(unittest.TestCase):
 
     def test_poll_dispatches_node_actions(self):
         action = self._node_action(DiagnosisActionType.COLLECT_METRIC)
-        self.context.next_diagnosis_action.side_effect = (
-            lambda instance: (
-                action
-                if instance == DiagnosisConstant.LOCAL_INSTANCE
-                else NoAction()
-            )
+        self.context.next_diagnosis_action.side_effect = lambda instance: (
+            action
+            if instance == DiagnosisConstant.LOCAL_INSTANCE
+            else NoAction()
         )
 
         self.executor.poll()
@@ -126,12 +124,10 @@ class DiagnosisActionExecutorTest(unittest.TestCase):
             event_msg="message",
             expired_time_period=600,
         )
-        self.context.next_diagnosis_action.side_effect = (
-            lambda instance: (
-                event
-                if instance == DiagnosisConstant.LOCAL_INSTANCE
-                else NoAction()
-            )
+        self.context.next_diagnosis_action.side_effect = lambda instance: (
+            event
+            if instance == DiagnosisConstant.LOCAL_INSTANCE
+            else NoAction()
         )
 
         self.executor.poll()

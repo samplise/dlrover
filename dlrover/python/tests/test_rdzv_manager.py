@@ -268,10 +268,7 @@ class TopologyRerankRdzvManagerTest(unittest.TestCase):
         self.assertEqual(snapshot_round, rdzv_round)
         self.assertEqual(
             snapshot_nodes,
-            [
-                (meta.node_id, meta.node_rank)
-                for meta in world.values()
-            ],
+            [(meta.node_id, meta.node_rank) for meta in world.values()],
         )
 
 
