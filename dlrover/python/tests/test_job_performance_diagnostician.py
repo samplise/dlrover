@@ -12,6 +12,8 @@
 # limitations under the License.
 
 import unittest
+from typing import Any, Dict
+from unittest.mock import patch
 
 from dlrover.python.common.constants import NodeStatus, NodeType
 from dlrover.python.common.node import Node
@@ -25,6 +27,9 @@ from dlrover.python.diagnosis.common.diagnosis_action import (
 )
 from dlrover.python.diagnosis.common.diagnosis_data import (
     PerformanceDiagnosisData,
+)
+from dlrover.python.diagnosis.common.diagnostician import (
+    DiagnosisObservation,
 )
 from dlrover.python.master.diagnosis.diagnosis_data_manager import (
     DiagnosisDataManager,
@@ -67,14 +72,15 @@ class JobPerformanceDiagnosticianTest(unittest.TestCase):
         }
         self.diagnostician = JobPerformanceDiagnostician(self.data_manager)
 
-    def _report(
+    def _make_report(
         self,
         report_id,
         node_id=0,
         timestamp=1000,
         epoch=2,
+        **overrides,
     ):
-        report = PerformanceDiagnosisData(
+        values: Dict[str, Any] = dict(
             timestamp=timestamp,
             issue_type="training_speed_degradation",
             metric_name="throughput_per_gpu_tflops",
@@ -87,11 +93,30 @@ class JobPerformanceDiagnosticianTest(unittest.TestCase):
             last_timestamp=timestamp,
             first_iteration=10,
             last_iteration=13,
+            node_id=node_id,
             report_id=report_id,
             job_uid="job-1",
             run_id="run-1",
             rdzv_epoch=epoch,
             config_fingerprint="config-1",
+        )
+        values.update(overrides)
+        return PerformanceDiagnosisData(**values)
+
+    def _report(
+        self,
+        report_id,
+        node_id=0,
+        timestamp=1000,
+        epoch=2,
+        **overrides,
+    ):
+        report = self._make_report(
+            report_id,
+            node_id=node_id,
+            timestamp=timestamp,
+            epoch=epoch,
+            **overrides,
         )
         self.data_manager.store_data(
             report,
@@ -202,6 +227,142 @@ class JobPerformanceDiagnosticianTest(unittest.TestCase):
         context["observing_paused"] = False
         actions = self.diagnostician.diagnose(**context)
         self.assertEqual(len(actions), 3)
+
+    def test_validation_error_branches(self):
+        context = self._context()
+
+        def invalid(reason_report, reason_context=None):
+            return self.diagnostician._validation_error(
+                reason_report, reason_context or context
+            )
+
+        self.assertEqual(invalid(self._make_report("valid")), "")
+        self.assertIn(
+            "unsupported",
+            invalid(self._make_report("type", issue_type="another_issue")),
+        )
+        self.assertIn(
+            "job",
+            invalid(self._make_report("job", job_uid="job-2")),
+        )
+        self.assertIn(
+            "epoch",
+            invalid(self._make_report("epoch", epoch=1)),
+        )
+        run_context = dict(context, run_id="run-2")
+        self.assertIn(
+            "run",
+            invalid(self._make_report("run"), run_context),
+        )
+        self.assertIn(
+            "samples",
+            invalid(self._make_report("samples", sample_count=0)),
+        )
+        self.assertIn(
+            "non-finite",
+            invalid(self._make_report("metric", metric_value=float("nan"))),
+        )
+        self.assertIn(
+            "baseline",
+            invalid(self._make_report("baseline", baseline_value=0)),
+        )
+        self.assertIn(
+            "source worker",
+            invalid(self._make_report("failed", node_id=3)),
+        )
+        self.assertIn(
+            "current rendezvous",
+            invalid(
+                self._make_report("outside", node_id=2),
+                dict(context, rdzv_node_ids=[0, 1]),
+            ),
+        )
+
+        released_node = Node(
+            NodeType.WORKER,
+            0,
+            status=NodeStatus.RUNNING,
+            rank_index=0,
+        )
+        released_node.is_released = True
+        released_context = dict(
+            context,
+            job_nodes={NodeType.WORKER: {0: released_node}},
+        )
+        self.assertIn(
+            "source worker",
+            invalid(self._make_report("released"), released_context),
+        )
+
+    def test_active_workers_filter(self):
+        self.job_nodes[NodeType.WORKER][1].is_released = True
+        workers = self.diagnostician._active_workers(self._context())
+        self.assertEqual([node.id for node in workers], [0, 2])
+
+    def test_invalid_observation_and_round_serialization(self):
+        self.assertIsInstance(
+            self.diagnostician.resolve(None)[0],  # type: ignore[arg-type]
+            NoAction,
+        )
+        missing = DiagnosisObservation(
+            "training_speed_degradation",
+            {"performance_id": "missing"},
+        )
+        self.assertIsInstance(self.diagnostician.resolve(missing)[0], NoAction)
+        performance = self.diagnostician._new_round(
+            self._make_report("round"), 1000, 1000
+        )
+        self.assertEqual(
+            performance.to_dict()["performance_id"],
+            performance.performance_id,
+        )
+
+    def test_round_expiration_and_pruning(self):
+        pending = self.diagnostician._new_round(
+            self._make_report("pending", timestamp=100),
+            100,
+            1000,
+        )
+        pending.state = DiagnosisState.ISSUE
+        self.diagnostician._ready_rounds.append(pending.performance_id)
+        self.diagnostician._expire_pending_rounds(1061)
+        self.assertEqual(pending.state, DiagnosisState.CLOSED)
+        self.assertEqual(len(self.diagnostician._ready_rounds), 0)
+
+        expired = self.diagnostician._new_round(
+            self._make_report("expired", timestamp=2000),
+            2000,
+            2000,
+        )
+        expired.state = DiagnosisState.CLOSED
+        self.diagnostician._prune_rounds(4001)
+        self.assertNotIn(expired.performance_id, self.diagnostician.rounds)
+
+    def test_no_workers_retries_then_times_out(self):
+        self._report("report-no-workers")
+        observation = self.diagnostician.observe(**self._context())
+        self.assertIsNotNone(observation)
+        assert observation is not None
+
+        with patch.object(
+            self.diagnostician, "_active_workers", return_value=[]
+        ):
+            actions = self.diagnostician.resolve(
+                observation, **self._context()
+            )
+            self.assertIsInstance(actions[0], NoAction)
+            performance = list(self.diagnostician.rounds.values())[0]
+            with patch(
+                "dlrover.python.master.diagnosis.diagnostician."
+                "performance.time.time",
+                return_value=performance.updated_at + 61,
+            ):
+                actions = self.diagnostician.resolve(
+                    observation, **self._context()
+                )
+
+        self.assertIsInstance(actions[0], NoAction)
+        self.assertEqual(performance.state, DiagnosisState.CLOSED)
 
     def test_recurrence_creates_a_new_round(self):
         self.diagnostician = JobPerformanceDiagnostician(

@@ -184,6 +184,34 @@ class DiagnosisMasterTest(unittest.TestCase):
             third.sequence_id,
         )
 
+    def test_data_manager_rejections_and_query_limits(self):
+        mgr = DiagnosisDataManager(
+            expire_time_period=1800,
+            max_report_size=512,
+        )
+        self.assertEqual(
+            mgr.store_data("invalid"),  # type: ignore[arg-type]
+            STORE_REJECTED,
+        )
+        self.assertEqual(
+            mgr.store_data(TrainingLog(logs=["x" * 1024])),
+            STORE_REJECTED,
+        )
+        self.assertEqual(
+            mgr.store_data(TrainingLog(logs=["line"], schema_version=2)),
+            STORE_REJECTED,
+        )
+
+        stored = TrainingLog(logs=["line"])
+        self.assertEqual(mgr.store_data(stored), STORE_ACCEPTED)
+        self.assertGreater(mgr.get_data_size(), 0)
+        self.assertEqual(
+            mgr.get_data(DiagnosisDataType.TRAINING_LOG, limit=0),
+            [],
+        )
+        self.assertEqual(mgr.get_data("missing"), [])
+        self.assertEqual(mgr.get_latest_sequence_id("missing"), 0)
+
     def test_job_performance_diagnostician_registered(self):
         with patch(
             "dlrover.python.master.diagnosis.diagnosis_master."

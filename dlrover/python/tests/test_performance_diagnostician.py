@@ -12,16 +12,27 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
 from dlrover.python.diagnosis.common.diagnosis_action import (
+    NoAction,
     ReportDiagnosisDataAction,
 )
 from dlrover.python.diagnosis.common.diagnosis_data import (
     PerformanceDiagnosisData,
+    TrainingLog,
+)
+from dlrover.python.diagnosis.common.diagnostician import (
+    DiagnosisObservation,
 )
 from dlrover.python.diagnosis.diagnostician.performance import (
+    ELAPSED_TIME_METRIC,
+    THROUGHPUT_METRIC,
+    PerformanceHistory,
+    PerformanceIssue,
     PerformanceDiagnostician,
     PerformanceDiagnosticianConfig,
+    PerformanceRecord,
 )
 
 
@@ -144,6 +155,187 @@ class TestPerformanceDiagnostician(unittest.TestCase):
                 logs=[self._log(8, 8, 0.5), self._log(9, 9, 0.5)]
             )
         )
+
+    def test_performance_record_and_history(self):
+        record = PerformanceRecord(
+            timestamp=10,
+            iteration=3,
+            metrics={THROUGHPUT_METRIC: 2.0},
+        )
+        self.assertEqual(
+            PerformanceRecord.from_json(record.to_json()),
+            record,
+        )
+
+        history = PerformanceHistory(max_records=2, retention_seconds=10)
+        self.assertTrue(history.add(record))
+        self.assertFalse(history.add(record))
+        metadata_only = PerformanceRecord(timestamp=11, metrics={"x": 1.0})
+        self.assertTrue(history.add(metadata_only))
+        self.assertEqual(history.throughput_baseline, 2.0)
+        self.assertTrue(
+            history.add(
+                PerformanceRecord(
+                    timestamp=12,
+                    metrics={THROUGHPUT_METRIC: 1.0},
+                )
+            )
+        )
+        self.assertEqual(len(history), 2)
+        latest = history.latest
+        self.assertIsNotNone(latest)
+        assert latest is not None
+        self.assertEqual(latest.timestamp, 12)
+        self.assertTrue(
+            history.add(
+                PerformanceRecord(
+                    timestamp=30,
+                    metrics={THROUGHPUT_METRIC: 0.5},
+                )
+            )
+        )
+        self.assertEqual(len(history), 1)
+        history.clear()
+        self.assertEqual(len(history), 0)
+        self.assertIsNone(history.latest)
+        self.assertIsNone(history.throughput_baseline)
+
+    def test_parse_invalid_and_fallback_records(self):
+        self.assertIsNone(
+            PerformanceDiagnostician.parse_log_line(
+                None  # type: ignore[arg-type]
+            )
+        )
+        self.assertIsNone(
+            PerformanceDiagnostician.parse_log_line("no metrics here")
+        )
+        elapsed_only = PerformanceDiagnostician.parse_log_line(
+            "elapsed time per iteration (ms): 12.5"
+        )
+        self.assertIsNotNone(elapsed_only)
+        assert elapsed_only is not None
+        self.assertEqual(elapsed_only.metrics[ELAPSED_TIME_METRIC], 12.5)
+        self.assertIsNone(elapsed_only.iteration)
+
+        with patch(
+            "dlrover.python.diagnosis.diagnostician.performance.time.time",
+            return_value=123,
+        ):
+            invalid_time = PerformanceDiagnostician.parse_log_line(
+                "[2026-99-99 99:99:99] throughput per GPU (TFLOP/s/GPU): 1.0"
+            )
+        self.assertIsNotNone(invalid_time)
+        assert invalid_time is not None
+        self.assertEqual(invalid_time.timestamp, 123)
+
+    def test_collect_training_log_variants(self):
+        diagnostician = self._diagnostician()
+        training_log = TrainingLog(logs=["line"])
+        self.assertIs(
+            diagnostician._collect_training_log(training_log=training_log),
+            training_log,
+        )
+        self.assertIsNone(diagnostician._collect_training_log(logs="line"))
+        collected_logs = diagnostician._collect_training_log(
+            logs=["line-1", "line-2"]
+        )
+        self.assertIsNotNone(collected_logs)
+        assert collected_logs is not None
+        self.assertEqual(collected_logs.logs, ["line-1", "line-2"])
+        self.assertIsNone(diagnostician._collect_training_log(log_file=1))
+        self.assertIsNone(diagnostician._collect_training_log())
+
+        collector = patch(
+            "dlrover.python.diagnosis.diagnostician.performance."
+            "TrainingLogCollector"
+        )
+        with collector as collector_cls:
+            collector_cls.return_value.collect_data.return_value = training_log
+            self.assertIs(
+                diagnostician._collect_training_log(log_file="train.log"),
+                training_log,
+            )
+
+    def test_severe_degradation_issue(self):
+        diagnostician = PerformanceDiagnostician(
+            PerformanceDiagnosticianConfig(
+                minimum_baseline_records=1,
+                minimum_window_records=10,
+                severe_window_seconds=10,
+                severe_fraction_threshold=0.3,
+                minimum_severe_window_records=2,
+                minimum_severe_records=1,
+                severe_degradation_ratio=0.2,
+            )
+        )
+        self.assertIsNone(diagnostician.observe(logs=[self._log(1, 1, 1.0)]))
+        observation = diagnostician.observe(logs=[self._log(2, 2, 0.1)])
+        self.assertIsNotNone(observation)
+        assert observation is not None
+        issue = PerformanceIssue.from_json(
+            observation.extra_infos["performance_issue"]
+        )
+        self.assertEqual(issue.metric_value, 0.1)
+        self.assertAlmostEqual(issue.threshold_value, 0.2)
+        self.assertAlmostEqual(issue.degradation_ratio, 0.1)
+
+    def test_absolute_thresholds(self):
+        diagnostician = PerformanceDiagnostician(
+            PerformanceDiagnosticianConfig(
+                throughput_threshold=2.0,
+                severe_throughput_threshold=0.1,
+            )
+        )
+        self.assertEqual(diagnostician._threshold(10.0), 2.0)
+        self.assertEqual(diagnostician._severe_threshold(10.0), 0.1)
+
+    def test_empty_windows_and_metadata_only_records(self):
+        diagnostician = PerformanceDiagnostician(
+            PerformanceDiagnosticianConfig(
+                minimum_window_records=1,
+                minimum_severe_window_records=1,
+                minimum_recovery_records=1,
+            )
+        )
+        self.assertIs(diagnostician.config, diagnostician._config)
+        self.assertIs(diagnostician.history, diagnostician._history)
+        record = PerformanceRecord(
+            timestamp=10,
+            metrics={"other": 1.0},
+        )
+        diagnostician.history.add(
+            PerformanceRecord(
+                timestamp=10,
+                metrics={THROUGHPUT_METRIC: 1.0},
+            )
+        )
+        self.assertIsNone(diagnostician._evaluate_record(record))
+        self.assertFalse(
+            diagnostician._detect_sustained_degradation(None, 10)[0]
+        )
+        self.assertFalse(diagnostician._detect_severe_degradation(None, 10)[0])
+        self.assertFalse(diagnostician._is_recovered(None, 10))
+        self.assertIsNone(diagnostician.observe(logs=[]))
+
+    def test_resolve_rejects_invalid_observations(self):
+        diagnostician = self._diagnostician()
+        self.assertIsInstance(
+            diagnostician.resolve(None)[0],  # type: ignore[arg-type]
+            NoAction,
+        )
+        self.assertIsInstance(
+            diagnostician.resolve(DiagnosisObservation(observation="other"))[
+                0
+            ],
+            NoAction,
+        )
+        missing = DiagnosisObservation("training_speed_degradation")
+        self.assertIsInstance(diagnostician.resolve(missing)[0], NoAction)
+        invalid = DiagnosisObservation(
+            "training_speed_degradation",
+            {"performance_issue": "{"},
+        )
+        self.assertIsInstance(diagnostician.resolve(invalid)[0], NoAction)
 
 
 if __name__ == "__main__":

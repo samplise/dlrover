@@ -19,6 +19,7 @@ from dlrover.python.diagnosis.common.constants import (
     DiagnosisConstant,
 )
 from dlrover.python.diagnosis.common.diagnosis_action import (
+    DiagnosisAction,
     EventAction,
     JobRestartAction,
     NoAction,
@@ -134,6 +135,23 @@ class DiagnosisActionExecutorTest(unittest.TestCase):
         self.client.report_event.assert_called_once()
         self.context.enqueue_diagnosis_action.assert_called_once_with(event)
 
+    def test_poll_does_not_reenqueue_expired_event(self):
+        event = EventAction(
+            event_type="type",
+            event_msg="message",
+            timestamp=1,
+            expired_time_period=1,
+        )
+        self.context.next_diagnosis_action.side_effect = lambda instance: (
+            event
+            if instance == DiagnosisConstant.LOCAL_INSTANCE
+            else NoAction()
+        )
+
+        self.executor.poll()
+        self.client.report_event.assert_called_once()
+        self.context.enqueue_diagnosis_action.assert_not_called()
+
     def test_cleanup_calls_profiler_controller(self):
         self.executor.on_workers_stopping()
         self.executor.shutdown()
@@ -141,6 +159,37 @@ class DiagnosisActionExecutorTest(unittest.TestCase):
             reason="workers stopping"
         )
         self.profiler.shutdown.assert_called_once()
+
+    def test_unsupported_and_failed_actions(self):
+        self.assertFalse(
+            self.executor.execute(None)  # type: ignore[arg-type]
+        )
+        self.assertFalse(self.executor.execute(DiagnosisAction()))
+        self.assertFalse(
+            self.executor.execute(self._node_action(DiagnosisActionType.LOG))
+        )
+
+        self.profiler.enable.return_value = False
+        self.assertFalse(
+            self.executor.execute(
+                self._node_action(DiagnosisActionType.ENABLE_PROFILING)
+            )
+        )
+
+    def test_report_rejection_and_missing_acknowledgement(self):
+        report = ReportDiagnosisDataAction(
+            data_cls="PerformanceDiagnosisData",
+            data_content="{}",
+            report_id="report-1",
+        )
+        self.client.report_diagnosis_data.return_value = None
+        self.assertFalse(self.executor.execute(report))
+        self.context.enqueue_diagnosis_action.assert_called_with(report)
+
+        rejected = MagicMock()
+        rejected.success = False
+        self.client.report_diagnosis_data.return_value = rejected
+        self.assertFalse(self.executor.execute(report))
 
 
 if __name__ == "__main__":

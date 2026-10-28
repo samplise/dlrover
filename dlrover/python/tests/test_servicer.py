@@ -704,6 +704,134 @@ class MasterServicerFunctionalTest(unittest.TestCase):
         self.assertEqual(reports[0].report_id, data.report_id)
         self.assertEqual(reports[0].node_id, 0)
 
+    def test_reject_invalid_performance_diagnosis_data(self):
+        def performance_data(report_id="performance-report-1"):
+            return PerformanceDiagnosisData(
+                timestamp=123,
+                issue_type="training_speed_degradation",
+                metric_name="throughput_per_gpu_tflops",
+                metric_value=0.5,
+                baseline_value=1.0,
+                threshold_value=0.7,
+                sample_count=2,
+                first_timestamp=100,
+                last_timestamp=101,
+                report_id=report_id,
+                job_uid="job-1",
+            )
+
+        data = performance_data()
+        valid_request = comm.DiagnosisReportData(
+            data_cls=data.__class__.__name__,
+            data_content=data.to_json(),
+            report_id=data.report_id,
+            data_type=data.data_type,
+        )
+        invalid_requests = [
+            comm.DiagnosisReportData(),
+            comm.DiagnosisReportData(
+                data_cls="MissingData",
+                data_content="{}",
+            ),
+            comm.DiagnosisReportData(
+                data_cls=data.__class__.__name__,
+                data_content="{",
+            ),
+            comm.DiagnosisReportData(
+                data_cls=data.__class__.__name__,
+                data_content=data.to_json(),
+                report_id=data.report_id,
+                data_type="OTHER",
+            ),
+            comm.DiagnosisReportData(
+                data_cls=data.__class__.__name__,
+                data_content=data.to_json(),
+                report_id=data.report_id,
+                data_type=data.data_type,
+                schema_version=2,
+            ),
+            comm.DiagnosisReportData(
+                data_cls=data.__class__.__name__,
+                data_content=data.to_json(),
+                report_id="another-report",
+                data_type=data.data_type,
+            ),
+        ]
+
+        metrics = WorkerTrainingMetric(
+            data_type=DiagnosisDataType.PERFORMANCE_ISSUE,
+            data_content="{}",
+            report_id="wrong-class",
+        )
+        invalid_requests.append(
+            comm.DiagnosisReportData(
+                data_cls=metrics.__class__.__name__,
+                data_content=metrics.to_json(),
+                report_id=metrics.report_id,
+                data_type=metrics.data_type,
+            )
+        )
+
+        wrong_type = performance_data()
+        wrong_type._data_type = DiagnosisDataType.GENERIC
+        invalid_requests.append(
+            comm.DiagnosisReportData(
+                data_cls=wrong_type.__class__.__name__,
+                data_content=wrong_type.to_json(),
+                report_id=wrong_type.report_id,
+                data_type=DiagnosisDataType.GENERIC,
+            )
+        )
+        invalid_requests.extend(
+            [
+                comm.DiagnosisReportData(
+                    data_cls=data.__class__.__name__,
+                    data_content=performance_data("").to_json(),
+                    data_type=data.data_type,
+                ),
+                comm.DiagnosisReportData(
+                    data_cls=valid_request.data_cls,
+                    data_content=valid_request.data_content,
+                    report_id=valid_request.report_id,
+                    data_type=valid_request.data_type,
+                ),
+                comm.DiagnosisReportData(
+                    data_cls="WorkerTrainingMetric",
+                    data_content="x"
+                    * (
+                        self.servicer._diagnosis_manager.data_manager.max_report_size
+                        + 1
+                    ),
+                ),
+            ]
+        )
+
+        for request in invalid_requests[:-2]:
+            self.assertFalse(
+                self.servicer._report_node_diagnosis_data(
+                    request, NodeType.WORKER, 0
+                )
+            )
+        self.assertFalse(
+            self.servicer._report_node_diagnosis_data(
+                invalid_requests[-2], NodeType.WORKER, 99
+            )
+        )
+        self.assertFalse(
+            self.servicer._report_node_diagnosis_data(invalid_requests[-1])
+        )
+
+        with mock.patch.object(
+            self.servicer._diagnosis_manager,
+            "collect_diagnosis_data",
+            return_value="rejected",
+        ):
+            self.assertFalse(
+                self.servicer._report_node_diagnosis_data(
+                    valid_request, NodeType.WORKER, 0
+                )
+            )
+
     def test_deal_with_reported_node_event(self):
         request = comm.NodeEvent(node=comm.NodeMeta())
         task_id = 1

@@ -13,6 +13,7 @@
 
 import os
 import time
+import types
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -139,6 +140,106 @@ class ProfilerControllerTest(unittest.TestCase):
         self.assertFalse(controller.enable(self._action()))
         self.assertFalse(controller.is_active)
         self.assertEqual(self.post.call_count, 2)
+
+    def test_control_url_and_duration_validation(self):
+        with patch.dict(
+            os.environ,
+            {
+                "XPU_TIMER_CONTROL_URL": "",
+                "XPU_TIMER_CONTROL_PORT": "",
+                "XPU_TIMER_PORT": "18889",
+            },
+        ):
+            controller = ProfilerController(post_func=self.post)
+        self.assertEqual(
+            controller._control_url,
+            "http://127.0.0.1:18888/HostingService/UpdateCuptiState",
+        )
+        self.assertEqual(controller._parse_port("invalid"), 0)
+        self.assertEqual(
+            controller._duration_seconds(self._action(duration="invalid")),
+            180,
+        )
+        self.assertEqual(
+            controller._duration_seconds(self._action(duration="10000")),
+            600,
+        )
+
+    def test_shutdown_retries_disable_and_clears_session(self):
+        controller = ProfilerController(
+            node_id=0,
+            control_url="http://127.0.0.1:18888/test",
+            request_retries=2,
+            stop_retry_interval_seconds=0,
+            post_func=self.post,
+        )
+        self.post.side_effect = [
+            self.response,
+            RuntimeError("disable failed"),
+            RuntimeError("disable failed again"),
+        ]
+        self.assertTrue(controller.enable(self._action()))
+        controller.shutdown()
+
+        self.assertFalse(controller.is_active)
+        self.assertTrue(controller.disable())
+        self.assertEqual(self.post.call_count, 3)
+
+    def test_empty_response_is_a_start_failure(self):
+        self.post.return_value = None
+        controller = self._controller()
+        self.assertFalse(controller.enable(self._action()))
+        self.assertFalse(controller.is_active)
+        self.assertEqual(self.post.call_count, 2)
+
+    def test_validation_rejections(self):
+        controller = self._controller()
+        self.assertFalse(
+            controller.enable(None)  # type: ignore[arg-type]
+        )
+
+        wrong_type = self._action()
+        wrong_type._action_type = DiagnosisActionType.COLLECT_METRIC
+        self.assertFalse(controller.enable(wrong_type))
+
+        missing_id = self._action()
+        missing_id._action_id = ""
+        self.assertFalse(controller.enable(missing_id))
+
+        wrong_instance = self._action()
+        wrong_instance._instance = 9
+        self.assertFalse(controller.enable(wrong_instance))
+
+        self.assertFalse(
+            controller.enable(self._action(), current_run_id="other-run")
+        )
+        wrong_job = self._action()
+        wrong_job._job_uid = "other-job"
+        self.assertFalse(controller.enable(wrong_job))
+        self.post.assert_not_called()
+
+    def test_configured_url_response_status_and_action_cache(self):
+        with patch.dict(
+            os.environ,
+            {"XPU_TIMER_CONTROL_URL": "http://127.0.0.1:9999/test"},
+        ):
+            controller = ProfilerController(
+                node_id=0,
+                request_retries=1,
+                post_func=self.post,
+            )
+        self.assertEqual(controller._control_url, "http://127.0.0.1:9999/test")
+
+        self.post.return_value = types.SimpleNamespace(
+            ok=False,
+            status_code=500,
+        )
+        self.assertFalse(controller.enable(self._action()))
+
+        for index in range(1025):
+            controller._remember_action(f"action-{index}")
+        self.assertEqual(len(controller._executed_action_ids), 1024)
+        self.assertNotIn("action-0", controller._executed_action_ids)
 
 
 if __name__ == "__main__":
