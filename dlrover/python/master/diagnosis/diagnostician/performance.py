@@ -28,6 +28,7 @@ from dlrover.python.diagnosis.common.constants import (
     DiagnosisState,
 )
 from dlrover.python.diagnosis.common.diagnosis_action import (
+    DiagnosisAction,
     NodeAction,
     NoAction,
 )
@@ -151,7 +152,7 @@ class JobPerformanceDiagnostician(Diagnostician):
 
     def resolve(
         self, problem: DiagnosisObservation, **kwargs
-    ) -> List[NodeAction]:
+    ) -> List[DiagnosisAction]:
         if (
             problem is None
             or problem.observation

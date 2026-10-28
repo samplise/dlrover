@@ -19,7 +19,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from statistics import median
-from typing import Deque, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Deque, Dict, Iterable, List, Optional, Set, Tuple
 
 from dlrover.python.common import env_utils
 from dlrover.python.diagnosis.common.constants import (
@@ -107,7 +107,7 @@ class PerformanceRecord:
         return json.dumps(self.to_dict())
 
     @classmethod
-    def from_dict(cls, value: Dict[str, object]) -> "PerformanceRecord":
+    def from_dict(cls, value: Dict[str, Any]) -> "PerformanceRecord":
         iteration = value.get("iteration")
         return cls(
             timestamp=int(value.get("timestamp", 0)),
@@ -180,8 +180,11 @@ class PerformanceHistory:
 
     @property
     def throughput_baseline(self) -> Optional[float]:
-        values = [record.throughput for record in self._records]
-        values = [value for value in values if value is not None]
+        values: List[float] = []
+        for record in self._records:
+            throughput = record.throughput
+            if throughput is not None:
+                values.append(throughput)
         return median(values) if values else None
 
 
@@ -222,7 +225,7 @@ class PerformanceIssue:
         return json.dumps(self.to_dict())
 
     @classmethod
-    def from_dict(cls, value: Dict[str, object]) -> "PerformanceIssue":
+    def from_dict(cls, value: Dict[str, Any]) -> "PerformanceIssue":
         return cls(**value)
 
     @classmethod
@@ -518,10 +521,12 @@ class PerformanceDiagnostician(Diagnostician):
                 else float("inf")
             ),
         )
+        throughput = representative.throughput
         ratio = (
-            representative.throughput / baseline
-            if representative.throughput is not None
-            and baseline not in (None, 0)
+            throughput / baseline
+            if throughput is not None
+            and baseline is not None
+            and baseline != 0
             else None
         )
         evidence = [

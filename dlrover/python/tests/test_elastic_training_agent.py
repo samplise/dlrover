@@ -50,6 +50,7 @@ from dlrover.python.common.constants import (
     GpuMetricEnum,
     JobConstant,
     NodeEnv,
+    NodeType,
     NpuMetricEnum,
     RendezvousName,
     RendezvousErrorType,

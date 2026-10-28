@@ -869,7 +869,7 @@ class MasterServicer(ABC):
 
         node_rank = message.node_rank
         if node_type and node_id is not None and node_id >= 0:
-            node = self._job_context.job_node(node_type, node_id)
+            node = _job_ctx.job_node(node_type, node_id)
             if node is None:
                 if is_performance_report:
                     logger.warning(
