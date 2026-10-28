@@ -185,8 +185,15 @@ class DiagnosisMasterTest(unittest.TestCase):
         )
 
     def test_job_performance_diagnostician_registered(self):
-        mgr = DiagnosisMaster()
-        mgr._register_diagnosticians()
+        with patch(
+            "dlrover.python.master.diagnosis.diagnosis_master."
+            "NodeInconsistencyDiagnostician"
+        ), patch(
+            "dlrover.python.master.diagnosis.diagnosis_master."
+            "TrainingHangDiagnostician"
+        ):
+            mgr = DiagnosisMaster()
+            mgr._register_diagnosticians()
         performance_diagnostician = mgr._diagnosticians[
             DiagnosticianType.PERFORMANCE
         ][0]
