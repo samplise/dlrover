@@ -57,6 +57,7 @@ from dlrover.python.diagnosis.diagnostician.resource_collect_failure import (
 )
 from dlrover.python.diagnosis.diagnostician.performance import (
     PerformanceDiagnostician,
+    PerformanceDiagnosticianConfig,
 )
 from dlrover.python.elastic_agent.context import get_agent_context
 from dlrover.python.elastic_agent.master_client import MasterClient
@@ -102,7 +103,9 @@ class DiagnosisAgent(Singleton, DiagnosisManager):
         )
         self.register_diagnostician(
             DiagnosticianType.PERFORMANCE,
-            PerformanceDiagnostician(),
+            PerformanceDiagnostician(
+                PerformanceDiagnosticianConfig.from_env()
+            ),
             60,
         )
 

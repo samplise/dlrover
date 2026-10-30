@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import unittest
 from unittest.mock import patch
 
@@ -38,31 +39,36 @@ from dlrover.python.diagnosis.diagnostician.performance import (
 
 class TestPerformanceDiagnostician(unittest.TestCase):
     @staticmethod
-    def _log(second, iteration, throughput):
+    def _log_at(timestamp, iteration, throughput):
         return (
-            "[dlrover-trainer7]:[2026-10-15 12:21:{second:02d}] "
+            f"[{timestamp}] "
             "iteration {iteration}/300000 "
             "elapsed time per iteration (ms): 100 | "
             "throughput per GPU (TFLOP/s/GPU): {throughput} | "
             "tokens(B/day/GPU): 1.0"
         ).format(
-            second=second,
             iteration=iteration,
             throughput=throughput,
+        )
+
+    @classmethod
+    def _log(cls, second, iteration, throughput):
+        return cls._log_at(
+            f"2026-10-15 12:21:{second:02d}",
+            iteration,
+            throughput,
         )
 
     def _diagnostician(self):
         return PerformanceDiagnostician(
             PerformanceDiagnosticianConfig(
                 minimum_baseline_records=3,
-                degradation_window_seconds=60,
+                degradation_window_seconds=2,
                 degradation_fraction_threshold=0.3,
-                minimum_window_records=4,
-                severe_window_seconds=10,
+                minimum_window_records=3,
                 severe_fraction_threshold=1.0,
-                minimum_severe_window_records=2,
-                recovery_window_seconds=60,
-                recovery_healthy_fraction=0.5,
+                recovery_window_seconds=1,
+                recovery_healthy_fraction=1.0,
                 minimum_recovery_records=2,
             )
         )
@@ -79,7 +85,11 @@ class TestPerformanceDiagnostician(unittest.TestCase):
     def test_requires_sustained_degradation_and_deduplicates_tail(self):
         diagnostician = self._diagnostician()
         healthy = [self._log(i, i, 1.0) for i in range(1, 4)]
-        degraded = [self._log(4, 4, 0.5), self._log(5, 5, 0.5)]
+        degraded = [
+            self._log(4, 4, 0.5),
+            self._log(5, 5, 0.5),
+            self._log(6, 6, 0.5),
+        ]
 
         self.assertIsNone(diagnostician.observe(logs=healthy))
         observation = diagnostician.observe(logs=degraded)
@@ -142,12 +152,128 @@ class TestPerformanceDiagnostician(unittest.TestCase):
         )
         self.assertIsNotNone(
             diagnostician.observe(
-                logs=[self._log(4, 4, 0.5), self._log(5, 5, 0.5)]
+                logs=[
+                    self._log(4, 4, 0.5),
+                    self._log(5, 5, 0.5),
+                    self._log(6, 6, 0.5),
+                ]
             )
         )
         self.assertIsNone(
             diagnostician.observe(
-                logs=[self._log(6, 6, 1.0), self._log(7, 7, 1.0)]
+                logs=[self._log(7, 7, 1.0), self._log(8, 8, 1.0)]
+            )
+        )
+        self.assertIsNotNone(
+            diagnostician.observe(
+                logs=[
+                    self._log(9, 9, 0.5),
+                    self._log(10, 10, 0.5),
+                    self._log(11, 11, 0.5),
+                ]
+            )
+        )
+
+    def test_sustained_window_uses_steps_and_duration(self):
+        diagnostician = PerformanceDiagnostician(
+            PerformanceDiagnosticianConfig(
+                minimum_baseline_records=1,
+                minimum_window_records=3,
+                degradation_window_seconds=60,
+                degradation_fraction_threshold=1.0,
+            )
+        )
+        self.assertIsNone(
+            diagnostician.observe(
+                logs=[
+                    self._log_at(
+                        "2026-10-15 12:00:00",
+                        1,
+                        1.0,
+                    )
+                ]
+            )
+        )
+        self.assertIsNone(
+            diagnostician.observe(
+                logs=[
+                    self._log_at(
+                        "2026-10-15 12:01:00",
+                        2,
+                        0.5,
+                    ),
+                    self._log_at(
+                        "2026-10-15 12:03:00",
+                        3,
+                        0.5,
+                    ),
+                ]
+            )
+        )
+        self.assertIsNotNone(
+            diagnostician.observe(
+                logs=[
+                    self._log_at(
+                        "2026-10-15 12:05:00",
+                        4,
+                        0.5,
+                    )
+                ]
+            )
+        )
+
+    def test_sustained_window_waits_for_duration(self):
+        diagnostician = PerformanceDiagnostician(
+            PerformanceDiagnosticianConfig(
+                minimum_baseline_records=1,
+                minimum_window_records=2,
+                degradation_window_seconds=120,
+                degradation_fraction_threshold=1.0,
+            )
+        )
+        self.assertIsNone(
+            diagnostician.observe(
+                logs=[self._log_at("2026-10-15 12:00:00", 1, 1.0)]
+            )
+        )
+        self.assertIsNone(
+            diagnostician.observe(
+                logs=[
+                    self._log_at("2026-10-15 12:00:30", 2, 0.5),
+                    self._log_at("2026-10-15 12:01:00", 3, 0.5),
+                ]
+            )
+        )
+        self.assertIsNotNone(
+            diagnostician.observe(
+                logs=[self._log_at("2026-10-15 12:02:30", 4, 0.5)]
+            )
+        )
+
+    def test_consecutive_abnormal_windows_are_required(self):
+        diagnostician = PerformanceDiagnostician(
+            PerformanceDiagnosticianConfig(
+                minimum_baseline_records=1,
+                minimum_window_records=2,
+                degradation_window_seconds=0,
+                degradation_fraction_threshold=1.0,
+                consecutive_abnormal_windows=2,
+            )
+        )
+        self.assertIsNone(diagnostician.observe(logs=[self._log(1, 1, 1.0)]))
+        self.assertIsNone(
+            diagnostician.observe(
+                logs=[self._log(2, 2, 0.5), self._log(3, 3, 0.5)]
+            )
+        )
+        self.assertIsNone(
+            diagnostician.observe(
+                logs=[self._log(4, 4, 1.0), self._log(5, 5, 1.0)]
+            )
+        )
+        self.assertIsNone(
+            diagnostician.observe(
+                logs=[self._log(6, 6, 0.5), self._log(7, 7, 0.5)]
             )
         )
         self.assertIsNotNone(
@@ -155,6 +281,75 @@ class TestPerformanceDiagnostician(unittest.TestCase):
                 logs=[self._log(8, 8, 0.5), self._log(9, 9, 0.5)]
             )
         )
+
+    def test_degradation_ratio_is_configurable(self):
+        diagnostician = PerformanceDiagnostician(
+            PerformanceDiagnosticianConfig(
+                minimum_baseline_records=1,
+                minimum_window_records=1,
+                degradation_window_seconds=0,
+                degradation_fraction_threshold=1.0,
+                degradation_ratio=0.8,
+            )
+        )
+        self.assertIsNone(diagnostician.observe(logs=[self._log(1, 1, 1.0)]))
+        self.assertIsNotNone(
+            diagnostician.observe(logs=[self._log(2, 2, 0.75)])
+        )
+
+    def test_sustained_degradation_defaults(self):
+        config = PerformanceDiagnosticianConfig()
+        self.assertEqual(config.minimum_window_records, 10)
+        self.assertEqual(config.degradation_window_seconds, 60)
+        self.assertEqual(config.degradation_ratio, 0.7)
+        self.assertEqual(config.severe_degradation_ratio, 0.2)
+        self.assertEqual(config.consecutive_abnormal_windows, 1)
+
+    def test_config_from_environment(self):
+        with patch.dict(
+            os.environ,
+            {
+                "PERFORMANCE_M": "20",
+                "PERFORMANCE_N": "1.5",
+                "PERFORMANCE_K": "2",
+                "PERFORMANCE_P": "0.8",
+                "PERFORMANCE_Q": "0.1",
+            },
+            clear=True,
+        ):
+            config = PerformanceDiagnosticianConfig.from_env()
+
+        self.assertEqual(config.minimum_window_records, 20)
+        self.assertEqual(config.degradation_window_seconds, 90)
+        self.assertEqual(config.consecutive_abnormal_windows, 2)
+        self.assertEqual(config.degradation_ratio, 0.8)
+        self.assertEqual(config.severe_degradation_ratio, 0.1)
+
+    def test_invalid_environment_values_use_defaults(self):
+        with patch.dict(
+            os.environ,
+            {
+                "PERFORMANCE_M": "invalid",
+                "PERFORMANCE_N": "-1",
+                "PERFORMANCE_K": "0",
+                "PERFORMANCE_P": "1.1",
+                "PERFORMANCE_Q": "invalid",
+            },
+            clear=True,
+        ):
+            config = PerformanceDiagnosticianConfig.from_env()
+
+        self.assertEqual(config.minimum_window_records, 10)
+        self.assertEqual(config.degradation_window_seconds, 60)
+        self.assertEqual(config.consecutive_abnormal_windows, 1)
+        self.assertEqual(config.degradation_ratio, 0.7)
+        self.assertEqual(config.severe_degradation_ratio, 0.2)
+
+    def test_config_from_empty_environment_uses_defaults(self):
+        with patch.dict(os.environ, {}, clear=True):
+            config = PerformanceDiagnosticianConfig.from_env()
+
+        self.assertEqual(config, PerformanceDiagnosticianConfig())
 
     def test_performance_record_and_history(self):
         record = PerformanceRecord(
@@ -260,16 +455,16 @@ class TestPerformanceDiagnostician(unittest.TestCase):
         diagnostician = PerformanceDiagnostician(
             PerformanceDiagnosticianConfig(
                 minimum_baseline_records=1,
-                minimum_window_records=10,
-                severe_window_seconds=10,
+                minimum_window_records=2,
+                degradation_window_seconds=0,
                 severe_fraction_threshold=0.3,
-                minimum_severe_window_records=2,
-                minimum_severe_records=1,
                 severe_degradation_ratio=0.2,
             )
         )
         self.assertIsNone(diagnostician.observe(logs=[self._log(1, 1, 1.0)]))
-        observation = diagnostician.observe(logs=[self._log(2, 2, 0.1)])
+        observation = diagnostician.observe(
+            logs=[self._log(2, 2, 0.1), self._log(3, 3, 1.0)]
+        )
         self.assertIsNotNone(observation)
         assert observation is not None
         issue = PerformanceIssue.from_json(
@@ -278,6 +473,62 @@ class TestPerformanceDiagnostician(unittest.TestCase):
         self.assertEqual(issue.metric_value, 0.1)
         self.assertAlmostEqual(issue.threshold_value, 0.2)
         self.assertAlmostEqual(issue.degradation_ratio, 0.1)
+
+    def test_severe_window_reuses_duration_and_ratio(self):
+        diagnostician = PerformanceDiagnostician(
+            PerformanceDiagnosticianConfig(
+                minimum_baseline_records=1,
+                minimum_window_records=2,
+                degradation_window_seconds=120,
+                severe_fraction_threshold=1.0,
+                severe_degradation_ratio=0.3,
+            )
+        )
+        self.assertIsNone(
+            diagnostician.observe(
+                logs=[self._log_at("2026-10-15 12:00:00", 1, 1.0)]
+            )
+        )
+        self.assertIsNone(
+            diagnostician.observe(
+                logs=[
+                    self._log_at("2026-10-15 12:00:30", 2, 0.25),
+                    self._log_at("2026-10-15 12:01:00", 3, 0.25),
+                ]
+            )
+        )
+        observation = diagnostician.observe(
+            logs=[self._log_at("2026-10-15 12:02:30", 4, 0.25)]
+        )
+        self.assertIsNotNone(observation)
+        assert observation is not None
+        issue = PerformanceIssue.from_json(
+            observation.extra_infos["performance_issue"]
+        )
+        self.assertAlmostEqual(issue.threshold_value, 0.3)
+
+    def test_consecutive_severe_windows_are_required(self):
+        diagnostician = PerformanceDiagnostician(
+            PerformanceDiagnosticianConfig(
+                minimum_baseline_records=1,
+                minimum_window_records=2,
+                degradation_window_seconds=0,
+                degradation_fraction_threshold=1.0,
+                consecutive_abnormal_windows=2,
+                severe_fraction_threshold=0.5,
+            )
+        )
+        self.assertIsNone(diagnostician.observe(logs=[self._log(1, 1, 1.0)]))
+        self.assertIsNone(
+            diagnostician.observe(
+                logs=[self._log(2, 2, 0.1), self._log(3, 3, 1.0)]
+            )
+        )
+        self.assertIsNotNone(
+            diagnostician.observe(
+                logs=[self._log(4, 4, 0.1), self._log(5, 5, 1.0)]
+            )
+        )
 
     def test_absolute_thresholds(self):
         diagnostician = PerformanceDiagnostician(
@@ -293,7 +544,6 @@ class TestPerformanceDiagnostician(unittest.TestCase):
         diagnostician = PerformanceDiagnostician(
             PerformanceDiagnosticianConfig(
                 minimum_window_records=1,
-                minimum_severe_window_records=1,
                 minimum_recovery_records=1,
             )
         )
