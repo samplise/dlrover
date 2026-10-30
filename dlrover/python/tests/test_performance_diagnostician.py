@@ -139,6 +139,39 @@ class TestPerformanceDiagnostician(unittest.TestCase):
         )
         self.assertIsNone(diagnostician.observe(logs=healthy + degraded))
 
+    def test_confirmed_issue_logs_details(self):
+        diagnostician = self._diagnostician()
+        self.assertIsNone(
+            diagnostician.observe(
+                logs=[
+                    self._log(1, 1, 1.0),
+                    self._log(2, 2, 1.0),
+                    self._log(3, 3, 1.0),
+                ]
+            )
+        )
+
+        with self.assertLogs("dlrover.logger", level="INFO") as captured:
+            observation = diagnostician.observe(
+                logs=[
+                    self._log(4, 4, 0.5),
+                    self._log(5, 5, 0.5),
+                    self._log(6, 6, 0.5),
+                ]
+            )
+
+        self.assertIsNotNone(observation)
+        output = "\n".join(captured.output)
+        self.assertIn("Confirmed training speed degradation", output)
+        self.assertIn("rule=sustained", output)
+        self.assertIn("trigger_throughput=0.5", output)
+        self.assertIn("worst_throughput=0.5", output)
+        self.assertIn("baseline=1.0", output)
+        self.assertIn("threshold=0.7", output)
+        self.assertIn("abnormal_fraction=1.000", output)
+        self.assertIn("abnormal_samples=3", output)
+        self.assertIn("iterations=4..6", output)
+
     def test_recovery_allows_a_new_issue(self):
         diagnostician = self._diagnostician()
         self.assertIsNone(

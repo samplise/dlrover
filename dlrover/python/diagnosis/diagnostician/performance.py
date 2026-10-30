@@ -773,6 +773,36 @@ class PerformanceDiagnostician(Diagnostician):
             evidence=evidence,
         )
 
+    def _log_confirmed_issue(
+        self,
+        rule: str,
+        issue: PerformanceIssue,
+        abnormal_fraction: float,
+        trigger_record: PerformanceRecord,
+    ):
+        logger.info(
+            "Confirmed training speed degradation on worker %s: "
+            "rule=%s, metric=%s, trigger_throughput=%s, "
+            "worst_throughput=%s, baseline=%s, threshold=%s, "
+            "degradation_ratio=%s, abnormal_fraction=%.3f, "
+            "abnormal_samples=%s, iterations=%s..%s, "
+            "timestamps=%s..%s.",
+            env_utils.get_node_id(),
+            rule,
+            issue.metric_name,
+            trigger_record.throughput,
+            issue.metric_value,
+            issue.baseline_value,
+            issue.threshold_value,
+            issue.degradation_ratio,
+            abnormal_fraction,
+            issue.sample_count,
+            issue.first_iteration,
+            issue.last_iteration,
+            issue.first_timestamp,
+            issue.last_timestamp,
+        )
+
     def _evaluate_record(
         self, record: PerformanceRecord
     ) -> Optional[PerformanceIssue]:
@@ -807,7 +837,7 @@ class PerformanceDiagnostician(Diagnostician):
         (
             severe_detected,
             severe_threshold,
-            _,
+            severe_fraction,
             severe_records,
             severe_count,
         ) = self._detect_severe_degradation(
@@ -818,7 +848,7 @@ class PerformanceDiagnostician(Diagnostician):
         (
             sustained_detected,
             sustained_threshold,
-            _,
+            sustained_fraction,
             degraded_records,
             degraded_count,
         ) = self._detect_sustained_degradation(
@@ -830,24 +860,38 @@ class PerformanceDiagnostician(Diagnostician):
         if severe_detected:
             self._issue_reported = True
             self._reset_performance_windows()
-            return self._make_issue(
+            issue = self._make_issue(
                 record,
                 baseline,
                 severe_threshold,
                 severe_records,
                 severe_count,
             )
+            self._log_confirmed_issue(
+                "severe",
+                issue,
+                severe_fraction,
+                record,
+            )
+            return issue
 
         if sustained_detected:
             self._issue_reported = True
             self._reset_performance_windows()
-            return self._make_issue(
+            issue = self._make_issue(
                 record,
                 baseline,
                 sustained_threshold,
                 degraded_records,
                 degraded_count,
             )
+            self._log_confirmed_issue(
+                "sustained",
+                issue,
+                sustained_fraction,
+                record,
+            )
+            return issue
 
         # Evaluate the normal threshold and add the record to the healthy baseline
         # if it meets the criteria.
