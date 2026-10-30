@@ -1,0 +1,21 @@
+dlrover/python/diagnosis/diagnostician/performance.py
+  s_32c603ce782424::t_9e5e019d057338 776-805,840,851,863,870-876,881,888-894
+dlrover/python/tests/test_performance_diagnostician.py
+  s_32c603ce782424::t_f913ac4229ffd0 142-174
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "765644cb1a4d5630f747970aecdd2dbef52bf98d",
+  "prompts": {},
+  "sessions": {
+    "s_32c603ce782424": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a162c8-02c4-7772-8f6a-5c75f159f666",
+        "model": "deepseek-flash"
+      },
+      "human_author": "bsang <b.sang@antgroup.com>"
+    }
+  }
+}
