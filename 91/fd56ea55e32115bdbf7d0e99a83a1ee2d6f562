@@ -1,0 +1,20 @@
+examples/pytorch/moe_xpu_timer_demo.py
+  s_32c603ce782424::t_78e60b43ef7309 1-114,118-119,121-144,148-212,214,216-375,377-381
+  s_32c603ce782424::t_c17212f730b1b1 115-117,120,145-147,213,215,376
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "91fd56ea55e32115bdbf7d0e99a83a1ee2d6f562",
+  "prompts": {},
+  "sessions": {
+    "s_32c603ce782424": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a162c8-02c4-7772-8f6a-5c75f159f666",
+        "model": "deepseek-flash"
+      },
+      "human_author": "bsang <b.sang@antgroup.com>"
+    }
+  }
+}
