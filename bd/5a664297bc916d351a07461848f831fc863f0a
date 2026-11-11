@@ -1,0 +1,22 @@
+examples/in_place_restart/README.md
+  s_d885ad434f04d7::t_92c26f11f75f27 187-204
+examples/in_place_restart/run_in_place_demo.py
+  s_d885ad434f04d7::t_2996a41b154804 150-162,204-210,215,240-247,275-285,297-301,326-343
+  s_d885ad434f04d7::t_f6ce325ddea7dc 344
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bd5a664297bc916d351a07461848f831fc863f0a",
+  "prompts": {},
+  "sessions": {
+    "s_d885ad434f04d7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c380-eb42-79b2-b655-b761b9db539e",
+        "model": "deepseek-flash"
+      },
+      "human_author": "bsang <b.sang@antgroup.com>"
+    }
+  }
+}
