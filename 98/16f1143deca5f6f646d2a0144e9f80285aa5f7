@@ -1,0 +1,60 @@
+examples/in_place_restart/Dockerfile
+  s_d885ad434f04d7::t_22c1b596a120ab 1-24,26-40,42,45-52
+  s_d885ad434f04d7::t_63c857cf2adefc 41
+  s_d885ad434f04d7::t_e735ee04f3015a 25
+  s_d885ad434f04d7::t_7f37d873d3b01e 43-44
+examples/in_place_restart/verify_image.py
+  s_d885ad434f04d7::t_68ebdb37318e95 21,107-115,117-119
+  s_d885ad434f04d7::t_8a76a01eab1705 1-20,22-106,116,120-259
+examples/in_place_restart/requirements.txt
+  s_d885ad434f04d7::t_142e180e4441bd 1-2
+examples/in_place_restart/moe_train.py
+  s_d885ad434f04d7::t_fc07d3d5343a73 866
+  s_d885ad434f04d7::t_f046e85fc64801 928-931
+  s_d885ad434f04d7::t_7ba331f8100ac8 1009-1014,1027-1028
+  s_d885ad434f04d7::t_68e05b8a022733 654-664,688,710
+  s_d885ad434f04d7::t_dc1750e40743b8 1-321,329-375,383-404,412,414-439,444-523,525-628,636-647,665-672,675-687,689-709,711-865,867-927,932-1008,1015-1026,1029-1044
+  s_d885ad434f04d7::t_c2c494b166f3f5 524
+  s_d885ad434f04d7::t_3801a7629203e2 405-411,413,440-443
+  s_d885ad434f04d7::t_af1f90901b82d6 648-653
+  s_d885ad434f04d7::t_46f7d25a969269 629-635
+  s_d885ad434f04d7::t_d82a1ba38ef829 673-674
+  s_d885ad434f04d7::t_8f99c8fe9fce8a 322-328,376-382
+examples/in_place_restart/run.sh
+  s_d885ad434f04d7::t_142e180e4441bd 1-18
+examples/in_place_restart/recovery_protocol.py
+  s_d885ad434f04d7::t_252d5157848be7 1-123
+examples/in_place_restart/run_in_place_demo.py
+  s_d885ad434f04d7::t_f3c23ce4a0547e 30
+  s_d885ad434f04d7::t_68e05b8a022733 282-290
+  s_d885ad434f04d7::t_36158fe80f5ac4 226
+  s_d885ad434f04d7::t_fc07d3d5343a73 256
+  s_d885ad434f04d7::t_7b860500145d05 1-29,31-75,81-225,227-255,257-281,291-368
+  s_d885ad434f04d7::t_b166be77935c48 76-80
+examples/in_place_restart/train.py
+  s_d885ad434f04d7::t_f046e85fc64801 1-20
+examples/in_place_restart/README.md
+  s_d885ad434f04d7::t_142e180e4441bd 1-28,33-36,145-204,206-273,276-279
+  s_d885ad434f04d7::t_a8a6755b90b311 44-53,104-105,120-131,137-143
+  s_d885ad434f04d7::t_f046e85fc64801 205
+  s_d885ad434f04d7::t_8a76a01eab1705 106-119
+  s_d885ad434f04d7::t_b166be77935c48 29-32
+  s_d885ad434f04d7::t_8498efd9a86090 274-275
+  s_d885ad434f04d7::t_22c1b596a120ab 37-43,54-103,132-136,144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9816f1143deca5f6f646d2a0144e9f80285aa5f7",
+  "prompts": {},
+  "sessions": {
+    "s_d885ad434f04d7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c380-eb42-79b2-b655-b761b9db539e",
+        "model": "deepseek-flash"
+      },
+      "human_author": "bsang <b.sang@antgroup.com>"
+    }
+  }
+}
