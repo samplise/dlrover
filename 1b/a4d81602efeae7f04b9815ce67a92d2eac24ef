@@ -1,0 +1,19 @@
+README.md
+  s_d885ad434f04d7::t_549f6922194d29 213-214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1ba4d81602efeae7f04b9815ce67a92d2eac24ef",
+  "prompts": {},
+  "sessions": {
+    "s_d885ad434f04d7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c380-eb42-79b2-b655-b761b9db539e",
+        "model": "deepseek-flash"
+      },
+      "human_author": "bsang <b.sang@antgroup.com>"
+    }
+  }
+}
