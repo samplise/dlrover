@@ -1,0 +1,23 @@
+examples/in_place_restart/tp2_pp2_dp2/hybrid_moe_train.py
+  s_d885ad434f04d7::t_67a39e56df56d1 1316-1317,1335-1337,1384-1387
+  s_d885ad434f04d7::t_a046fc6823e685 51,854-859
+  s_d885ad434f04d7::t_b159e0c0225776 26,28,154-158,898-959,1010,1018,1029
+  s_d885ad434f04d7::t_408ca75f9acde2 279,285,328-333
+  s_d885ad434f04d7::t_d2d2aa6b7c7593 502-505,513,559-562,1006-1009,1026-1028
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4edcb855bf2e529e97e7789ff62863e51fb49d3a",
+  "prompts": {},
+  "sessions": {
+    "s_d885ad434f04d7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c380-eb42-79b2-b655-b761b9db539e",
+        "model": "deepseek-flash"
+      },
+      "human_author": "bsang <b.sang@antgroup.com>"
+    }
+  }
+}
