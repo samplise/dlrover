@@ -1,0 +1,49 @@
+examples/in_place_restart/dp4/README.md
+  s_d885ad434f04d7::t_b08f281aa2581b 1-31
+examples/in_place_restart/Dockerfile
+  s_d885ad434f04d7::t_99fc00fe6322e0 52
+examples/in_place_restart/tp2_pp2_dp2/README.md
+  s_d885ad434f04d7::t_b08f281aa2581b 1-39
+README.md
+  s_d885ad434f04d7::t_83cfd0d03f4108 213
+examples/in_place_restart/dp4/run_in_place_demo.py
+  s_d885ad434f04d7::t_516ac2f4233a0b 32-35
+examples/in_place_restart/tp2_pp2_dp2/run.sh
+  s_d885ad434f04d7::t_0c46e18a73b7db 1-18
+examples/in_place_restart/dp4/moe_train.py
+  s_d885ad434f04d7::t_4d693233f5e788 25,41-44
+examples/in_place_restart/tp2_pp2_dp2/train.py
+  s_d885ad434f04d7::t_6c9590d4c2eaf9 1-20
+examples/in_place_restart/verify_image.py
+  s_d885ad434f04d7::t_17488fa78da069 101,103-104,248-249
+  s_d885ad434f04d7::t_99fc00fe6322e0 130-131,133-134
+examples/in_place_restart/README.md
+  s_d885ad434f04d7::t_4083119e911365 366-367
+  s_d885ad434f04d7::t_aaa182e171323d 327-336,338-340
+  s_d885ad434f04d7::t_1869e8f0c71aaf 1,21
+  s_d885ad434f04d7::t_99fc00fe6322e0 93,102,145,150,208,223,268,304,337,343
+  s_d885ad434f04d7::t_17488fa78da069 266-267,269-292,298-303,305-326,368
+  s_d885ad434f04d7::t_2396dea53aae73 293-297
+examples/in_place_restart/dp4/train.py
+  s_d885ad434f04d7::t_6e9cdba3d10c5f 14
+examples/in_place_restart/tp2_pp2_dp2/hybrid_moe_train.py
+  s_d885ad434f04d7::t_4c4cfe15ec3d9b 1-1333
+examples/in_place_restart/tp2_pp2_dp2/run_in_place_demo.py
+  s_d885ad434f04d7::t_3ddb4fdc53e43f 1-412
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4a19eb87a11c78f82f395b1d91311a9a655c92ed",
+  "prompts": {},
+  "sessions": {
+    "s_d885ad434f04d7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c380-eb42-79b2-b655-b761b9db539e",
+        "model": "deepseek-flash"
+      },
+      "human_author": "bsang <b.sang@antgroup.com>"
+    }
+  }
+}
